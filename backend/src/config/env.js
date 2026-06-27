@@ -14,6 +14,10 @@ const env = {
     secret: process.env.JWT_SECRET || 'dev-secret-change-in-production',
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
+  openai: {
+    apiKey: process.env.OPENAI_API_KEY || '',
+    model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+  },
 };
 
 if (env.nodeEnv === 'production' && env.jwt.secret === 'dev-secret-change-in-production') {
