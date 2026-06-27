@@ -11,7 +11,7 @@
 
 | File | Mục đích |
 |------|----------|
-| `docker-compose.yml` | Cấu hình production: MySQL + backend |
+| `docker-compose.yml` | Cấu hình production: MySQL + backend + phpMyAdmin |
 | `docker-compose.dev.yml` | Override cho dev: hot reload, mount source code |
 | `backend/Dockerfile` | Build image Node.js cho backend |
 | `backend/sql/init.sql` | Khởi tạo database và seed dữ liệu |
@@ -54,6 +54,13 @@ Kết quả mong đợi:
 |---------|-----|
 | Backend API | http://localhost:3000 |
 | MySQL | localhost:3306 |
+| phpMyAdmin | http://localhost:8080 |
+
+### Đăng nhập phpMyAdmin
+
+phpMyAdmin tự kết nối tới service `mysql`. Đăng nhập bằng:
+
+- **Username:** `lunar_user` — **Password:** `lunar_password` (hoặc `root` / `root_password`)
 
 ### Biến môi trường production
 
