@@ -10,44 +10,6 @@ const {
   getTodayDateString,
 } = require('../utils/dateTime');
 
-const CAN_MAP = {
-  '\u7532': 'Giáp',
-  '\u4e59': 'Ất',
-  '\u4e19': 'Bính',
-  '\u4e01': 'Đinh',
-  '\u620a': 'Mậu',
-  '\u5df1': 'Kỷ',
-  '\u5e9a': 'Canh',
-  '\u8f9b': 'Tân',
-  '\u58ec': 'Nhâm',
-  '\u7678': 'Quý',
-};
-
-const CHI_MAP = {
-  '\u5b50': 'Tý',
-  '\u4e11': 'Sửu',
-  '\u5bc5': 'Dần',
-  '\u536f': 'Mão',
-  '\u8fb0': 'Thìn',
-  '\u5df3': 'Tỵ',
-  '\u5348': 'Ngọ',
-  '\u672a': 'Mùi',
-  '\u7533': 'Thân',
-  '\u9149': 'Dậu',
-  '\u620c': 'Tuất',
-  '\u4ea5': 'Hợi',
-};
-
-function translateGanChi(ganChiStr) {
-  if (!ganChiStr || ganChiStr.length < 2) {
-    return ganChiStr;
-  }
-
-  const gan = CAN_MAP[ganChiStr[0]] || ganChiStr[0];
-  const chi = CHI_MAP[ganChiStr[1]] || ganChiStr[1];
-  return `${gan} ${chi}`;
-}
-
 function assertDateOnly(dateStr) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || '');
 
