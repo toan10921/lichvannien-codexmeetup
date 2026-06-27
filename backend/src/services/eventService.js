@@ -123,6 +123,33 @@ function formatEvent(row) {
   };
 }
 
+function formatConflictMessage(conflicts) {
+  if (!Array.isArray(conflicts) || conflicts.length === 0) {
+    return 'Khung thời gian này đang bị trùng lịch.';
+  }
+
+  const preview = conflicts
+    .slice(0, 2)
+    .map((event) => {
+      const start = event.start_at?.slice(0, 16).replace('T', ' ') || '';
+      const end = event.end_at?.slice(0, 16).replace('T', ' ') || '';
+      const range = event.is_all_day
+        ? 'cả ngày'
+        : end
+          ? `${start} → ${end}`
+          : start;
+
+      return `${event.title} (${range})`;
+    })
+    .join(', ');
+
+  const suffix = conflicts.length > 2
+    ? ` và ${conflicts.length - 2} lịch khác`
+    : '';
+
+  return `Khung thời gian này đang trùng với: ${preview}${suffix}.`;
+}
+
 async function findEventById(userId, eventId) {
   const [rows] = await pool.execute(
     `SELECT id, title, description,
@@ -159,6 +186,63 @@ async function listEventsInRange(userId, rangeStart, rangeEndExclusive) {
   return rows.map(formatEvent);
 }
 
+async function findConflictingEvents(
+  userId,
+  startAt,
+  endAt,
+  { excludeEventId = null } = {},
+) {
+  const params = [userId, endAt || startAt, startAt];
+  let query = `SELECT id, title, description,
+                      DATE_FORMAT(start_at, '%Y-%m-%d %H:%i:%s') AS start_at,
+                      DATE_FORMAT(end_at, '%Y-%m-%d %H:%i:%s') AS end_at,
+                      is_all_day,
+                      DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+                      DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
+                 FROM calendar_events
+                WHERE user_id = ?
+                  AND start_at < ?
+                  AND COALESCE(end_at, start_at) > ?`;
+
+  if (excludeEventId) {
+    query += ' AND id <> ?';
+    params.push(excludeEventId);
+  }
+
+  query += ' ORDER BY start_at ASC, id ASC';
+
+  const [rows] = await pool.execute(query, params);
+  return rows.map(formatEvent);
+}
+
+async function assertNoEventConflict(
+  userId,
+  startAt,
+  endAt,
+  { excludeEventId = null } = {},
+) {
+  const conflicts = await findConflictingEvents(userId, startAt, endAt, { excludeEventId });
+
+  if (conflicts.length === 0) {
+    return;
+  }
+
+  throw new AppError(
+    formatConflictMessage(conflicts),
+    409,
+    {
+      errors: conflicts.map((event) => ({
+        code: 'EVENT_CONFLICT',
+        id: event.id,
+        title: event.title,
+        start_at: event.start_at,
+        end_at: event.end_at,
+        is_all_day: event.is_all_day,
+      })),
+    },
+  );
+}
+
 async function listEventsByMonth(userId, monthValue) {
   const current = getCurrentYearMonth();
   const normalizedMonth = monthValue || `${current.year}-${String(current.month).padStart(2, '0')}`;
@@ -191,6 +275,7 @@ async function listEventsByDate(userId, dateStr) {
 
 async function createEvent(userId, payload) {
   const normalized = buildEventPayload(payload);
+  await assertNoEventConflict(userId, normalized.start_at, normalized.end_at || normalized.start_at);
 
   const [result] = await pool.execute(
     `INSERT INTO calendar_events (user_id, title, description, start_at, end_at, is_all_day)
@@ -242,6 +327,12 @@ async function updateEvent(userId, eventId, payload) {
   }
 
   const normalized = buildEventPayload(payload, existing);
+  await assertNoEventConflict(
+    userId,
+    normalized.start_at,
+    normalized.end_at || normalized.start_at,
+    { excludeEventId: eventId },
+  );
 
   await pool.execute(
     `UPDATE calendar_events
@@ -279,8 +370,10 @@ async function deleteEvent(userId, eventId) {
 }
 
 module.exports = {
+  assertNoEventConflict,
   createEvent,
   deleteEvent,
+  findConflictingEvents,
   listEventsByDate,
   listEventsByMonth,
   listEventsInRange,

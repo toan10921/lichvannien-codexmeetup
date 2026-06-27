@@ -338,6 +338,21 @@ function formatHistory(history) {
     }));
 }
 
+function normalizePlannerRankings(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => ({
+      candidate_id: typeof item.candidate_id === 'string' ? item.candidate_id.trim() : '',
+      reason: typeof item.reason === 'string' ? item.reason.trim() : '',
+      rating: VALID_RATINGS.has(item.rating) ? item.rating : 'neutral',
+    }))
+    .filter((item) => item.candidate_id);
+}
+
 async function askAdvisor(message, calendarContext, conversationHistory = [], options = {}) {
   if (!openai) {
     return attachCalendarContextToResponse(
@@ -378,6 +393,63 @@ async function askAdvisor(message, calendarContext, conversationHistory = [], op
   } catch (error) {
     console.error('[AIAdvisorService] OpenAI API Error:', error);
     return attachCalendarContextToResponse(getFallbackResponse(error.message), calendarContext, options);
+  }
+}
+
+async function rerankPlanningSuggestions(planningItem, candidates = []) {
+  if (!openai || !Array.isArray(candidates) || candidates.length === 0) {
+    return null;
+  }
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: env.openai.model,
+      messages: [
+        {
+          role: 'system',
+          content: `Bạn là trợ lý planner cho ứng dụng lịch vạn niên.
+Bạn chỉ được chọn trong danh sách candidate_slots do hệ thống cung cấp.
+Không được tạo thêm ngày/giờ mới.
+Hãy ưu tiên:
+- mức độ phù hợp với mục tiêu sự kiện từ title/description/category
+- day_advice.summary, good_for, avoid_for
+- day_quality, good_hours, preferred_time_of_day
+- tránh kết luận quá đà; mọi nhận xét phải mang tính tham khảo
+
+Trả về JSON đúng cấu trúc:
+{
+  "summary": "Tóm tắt ngắn 1-2 câu về tiêu chí chọn lịch",
+  "ranked_suggestions": [
+    {
+      "candidate_id": "candidate-1",
+      "rating": "favorable" | "neutral" | "caution",
+      "reason": "Lý do ngắn gọn bằng tiếng Việt, gắn trực tiếp với mục tiêu sự kiện và dữ liệu ngày"
+    }
+  ]
+}`,
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            planning_item: planningItem,
+            candidate_slots: candidates,
+          }),
+        },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.25,
+    });
+
+    const content = response.choices?.[0]?.message?.content;
+    const parsed = parseJsonObject(content);
+
+    return {
+      summary: typeof parsed.summary === 'string' ? parsed.summary.trim() : '',
+      ranked_suggestions: normalizePlannerRankings(parsed.ranked_suggestions),
+    };
+  } catch (error) {
+    console.error('[AIAdvisorService] Planner rerank error:', error);
+    return null;
   }
 }
 
@@ -513,4 +585,5 @@ function getFallbackDayAdvice() {
 module.exports = {
   askAdvisor,
   generateDayAdvice,
+  rerankPlanningSuggestions,
 };

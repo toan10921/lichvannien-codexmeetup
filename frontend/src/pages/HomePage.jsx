@@ -278,7 +278,7 @@ function PlannerComposer({
       ) : (
         <form className="calendar-event-form" onSubmit={onPlanningSubmit}>
           <p className="planner-helper-text">
-            Tạo việc chưa có lịch cố định, hệ thống sẽ gợi ý tối đa 5 slot phù hợp để bạn chốt.
+            Tạo việc chưa có lịch cố định. AI sẽ đọc tiêu đề + ghi chú của bạn, rồi xếp hạng tối đa 5 slot phù hợp để bạn chốt.
           </p>
 
           <label>
@@ -292,13 +292,13 @@ function PlannerComposer({
           </label>
 
           <label>
-            Mô tả / ghi chú
+            Mô tả / ghi chú cho AI
             <textarea
               name="description"
               rows="3"
               value={planningForm.description}
               onChange={onPlanningChange}
-              placeholder="Cần ưu tiên ngày đẹp, tránh trùng lịch sales..."
+              placeholder="Ví dụ: Đây là lịch ký hợp đồng, cần ưu tiên ngày đẹp, tránh cuối tuần và không trùng lịch sales..."
             />
           </label>
 
@@ -513,6 +513,12 @@ function PlannerTimeline({
                   </div>
                 ) : null}
 
+                {item.suggestions?.[0]?.planner_summary ? (
+                  <p className="planner-ai-summary">
+                    <strong>AI nhận định:</strong> {item.suggestions[0].planner_summary}
+                  </p>
+                ) : null}
+
                 {item.suggestions?.length > 0 ? (
                   <div className="planner-suggestion-list">
                     {item.suggestions.map((suggestion) => {
@@ -536,6 +542,9 @@ function PlannerTimeline({
                               {suggestion.day_quality_label || suggestion.day_rating}
                               {suggestion.display_label ? ` · ${suggestion.display_label}` : ''}
                             </em>
+                            {suggestion.reason_source === 'ai' ? (
+                              <small className="planner-ai-badge">AI đã xếp hạng lại slot này theo mục tiêu sự kiện</small>
+                            ) : null}
                             <p>{suggestion.reason}</p>
                           </div>
 
@@ -1473,6 +1482,38 @@ function HomePage() {
 
         <section className="calendar-content-grid">
           <div className="calendar-main-column">
+            <PlannerComposer
+              mode={plannerMode}
+              onModeChange={handlePlannerModeChange}
+              eventForm={eventForm}
+              editingEventId={editingEventId}
+              eventError={eventError}
+              savingEvent={savingEvent}
+              onEventChange={handleEventFormChange}
+              onToggleAllDay={handleToggleAllDay}
+              onEventSubmit={handleEventSubmit}
+              onCancelEdit={resetEventForm}
+              planningForm={planningForm}
+              planningFormError={planningFormError}
+              savingPlanning={savingPlanning}
+              onPlanningChange={handlePlanningFormChange}
+              onPlanningSubmit={handlePlanningSubmit}
+              onPlanningReset={resetPlanningForm}
+            />
+
+            <PlannerTimeline
+              timeline={planningTimeline}
+              loading={loadingPlanning}
+              timelineError={planningTimelineError}
+              plannerActionKey={plannerActionKey}
+              onOpenFixedEvent={handleSelectDate}
+              onSuggestItem={handleSuggestPlanningItem}
+              onConfirmSuggestion={handleConfirmSuggestion}
+              onDeleteItem={handleDeletePlanningItem}
+            />
+          </div>
+
+          <aside className="calendar-side-column">
             <section className="calendar-card">
               <div className="calendar-card__header">
                 <div className="calendar-nav">
@@ -1558,38 +1599,6 @@ function HomePage() {
                 <div className="calendar-empty-state">Ngày này chưa có sự kiện cá nhân.</div>
               )}
             </section>
-          </div>
-
-          <aside className="calendar-side-column">
-            <PlannerComposer
-              mode={plannerMode}
-              onModeChange={handlePlannerModeChange}
-              eventForm={eventForm}
-              editingEventId={editingEventId}
-              eventError={eventError}
-              savingEvent={savingEvent}
-              onEventChange={handleEventFormChange}
-              onToggleAllDay={handleToggleAllDay}
-              onEventSubmit={handleEventSubmit}
-              onCancelEdit={resetEventForm}
-              planningForm={planningForm}
-              planningFormError={planningFormError}
-              savingPlanning={savingPlanning}
-              onPlanningChange={handlePlanningFormChange}
-              onPlanningSubmit={handlePlanningSubmit}
-              onPlanningReset={resetPlanningForm}
-            />
-
-            <PlannerTimeline
-              timeline={planningTimeline}
-              loading={loadingPlanning}
-              timelineError={planningTimelineError}
-              plannerActionKey={plannerActionKey}
-              onOpenFixedEvent={handleSelectDate}
-              onSuggestItem={handleSuggestPlanningItem}
-              onConfirmSuggestion={handleConfirmSuggestion}
-              onDeleteItem={handleDeletePlanningItem}
-            />
 
             <AdvisorPanel
               advisorDate={advisorDate}

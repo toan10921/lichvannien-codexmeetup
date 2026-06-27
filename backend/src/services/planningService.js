@@ -1,5 +1,6 @@
 const { pool } = require('../config/db');
 const AppError = require('../utils/AppError');
+const aiAdvisorService = require('./aiAdvisorService');
 const eventService = require('./eventService');
 const calendarService = require('./calendarService');
 const {
@@ -359,6 +360,104 @@ function buildSuggestionReason(detail, candidate, sameDayEvents) {
   return fragments.join('. ');
 }
 
+function buildPlanningIntent(item) {
+  return [item.title, item.description, item.category]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function buildAiCandidateId(index) {
+  return `candidate-${index + 1}`;
+}
+
+async function rerankSuggestionsWithAi(item, sortedSuggestions) {
+  const aiCandidates = sortedSuggestions
+    .slice(0, 8)
+    .map((suggestion, index) => ({
+      candidate_id: buildAiCandidateId(index),
+      date: suggestion.date,
+      start_at: suggestion.start_at,
+      end_at: suggestion.end_at,
+      weekday: suggestion.weekday,
+      lunar_date: suggestion.lunar_date,
+      can_chi_day: suggestion.can_chi_day,
+      display_label: suggestion.display_label,
+      day_quality_label: suggestion.day_quality_label,
+      day_rating: suggestion.day_rating,
+      day_advice_summary: suggestion.day_advice_summary,
+      good_for: suggestion.good_for || [],
+      avoid_for: suggestion.avoid_for || [],
+      conflict_count: suggestion.conflict_count || 0,
+      base_reason: suggestion.reason,
+      base_score: suggestion.score,
+    }));
+
+  const aiResult = await aiAdvisorService.rerankPlanningSuggestions(
+    {
+      title: item.title,
+      description: item.description,
+      category: item.category,
+      priority: item.priority,
+      duration_minutes: item.duration_minutes,
+      preferred_time_of_day: item.preferred_time_of_day,
+      avoid_weekends: item.avoid_weekends,
+      prefer_good_day: item.prefer_good_day,
+      is_all_day: item.is_all_day,
+      intent: buildPlanningIntent(item),
+    },
+    aiCandidates,
+  );
+
+  if (!aiResult?.ranked_suggestions?.length) {
+    return sortedSuggestions
+      .slice(0, 5)
+      .map((suggestion, index) => ({
+        ...suggestion,
+        rank: index + 1,
+        reason_source: 'rule-based',
+      }));
+  }
+
+  const candidateMap = new Map(
+    aiCandidates.map((candidate, index) => [candidate.candidate_id, sortedSuggestions[index]]),
+  );
+  const usedStartAt = new Set();
+
+  const aiRanked = aiResult.ranked_suggestions
+    .map((rankedItem) => {
+      const matched = candidateMap.get(rankedItem.candidate_id);
+      if (!matched || usedStartAt.has(matched.start_at)) {
+        return null;
+      }
+
+      usedStartAt.add(matched.start_at);
+      return {
+        ...matched,
+        day_rating: rankedItem.rating || matched.day_rating,
+        reason: rankedItem.reason || matched.reason,
+        reason_source: 'ai',
+        planner_summary: aiResult.summary || '',
+      };
+    })
+    .filter(Boolean);
+
+  const fallbackSuggestions = sortedSuggestions
+    .filter((suggestion) => !usedStartAt.has(suggestion.start_at))
+    .slice(0, Math.max(0, 5 - aiRanked.length))
+    .map((suggestion) => ({
+      ...suggestion,
+      reason_source: suggestion.reason_source || 'rule-based',
+      planner_summary: aiResult.summary || '',
+    }));
+
+  return [...aiRanked, ...fallbackSuggestions]
+    .slice(0, 5)
+    .map((suggestion, index) => ({
+      ...suggestion,
+      rank: index + 1,
+    }));
+}
+
 async function findPlanningItemById(userId, planningItemId) {
   const [rows] = await pool.execute(
     `SELECT id, title, description, category, priority, duration_minutes,
@@ -478,25 +577,29 @@ async function generateSuggestions(userId, planningItemId) {
         is_all_day: candidate.is_all_day,
         display_label: candidate.display_label,
         score,
+        weekday: detail.weekday,
+        lunar_date: detail.lunar_date,
+        can_chi_day: detail.can_chi_day,
         day_rating: detail.day_advice?.day_rating || 'neutral',
         day_quality_label: detail.day_quality?.label || '',
+        day_advice_summary: detail.day_advice?.summary || '',
+        good_for: detail.day_advice?.good_for || [],
+        avoid_for: detail.day_advice?.avoid_for || [],
+        conflict_count: sameDayEvents.length,
         reason: buildSuggestionReason(detail, candidate, sameDayEvents),
       });
     });
   }
 
-  const topSuggestions = suggestions
+  const sortedSuggestions = suggestions
     .sort((left, right) => {
       if (right.score !== left.score) {
         return right.score - left.score;
       }
       return left.start_at.localeCompare(right.start_at);
-    })
-    .slice(0, 5)
-    .map((suggestion, index) => ({
-      ...suggestion,
-      rank: index + 1,
-    }));
+    });
+
+  const topSuggestions = await rerankSuggestionsWithAi(item, sortedSuggestions);
 
   await pool.execute(
     `UPDATE planning_items
