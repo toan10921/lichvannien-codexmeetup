@@ -5,20 +5,29 @@
 ## Yêu cầu
 
 - [Docker](https://docs.docker.com/get-docker/) và Docker Compose v2
-- Port `3000` (backend) và `3306` (MySQL) chưa bị chiếm
+- Các port chưa bị chiếm: `3000` (backend), `3306` (MySQL), `5173` (frontend dev), `8080` (phpMyAdmin), `8081` (frontend prod)
+
+## Thành phần
+
+- **backend** — API Node.js (Express)
+- **frontend** — React (Vite)
+- **mysql** — cơ sở dữ liệu
+- **phpmyadmin** — quản trị DB qua web
 
 ## Cấu trúc Docker
 
 | File | Mục đích |
 |------|----------|
-| `docker-compose.yml` | Cấu hình production: MySQL + backend + phpMyAdmin |
+| `docker-compose.yml` | Cấu hình production: MySQL + backend + frontend + phpMyAdmin |
 | `docker-compose.dev.yml` | Override cho dev: hot reload, mount source code |
 | `backend/Dockerfile` | Build image Node.js cho backend |
+| `frontend/Dockerfile` | Build frontend (Vite) rồi serve bằng nginx (production) |
+| `frontend/Dockerfile.dev` | Vite dev server có hot reload (development) |
 | `backend/sql/init.sql` | Khởi tạo database và seed dữ liệu |
 
 ## Chạy Production
 
-Production chạy backend bằng `node src/server.js`, không mount source code, không hot reload.
+Production chạy backend bằng `node src/server.js` và frontend được build tĩnh rồi serve bằng nginx. Không mount source code, không hot reload.
 
 ```bash
 docker compose up --build -d
@@ -52,6 +61,7 @@ Kết quả mong đợi:
 
 | Dịch vụ | URL |
 |---------|-----|
+| Frontend (nginx) | http://localhost:8081 |
 | Backend API | http://localhost:3000 |
 | MySQL | localhost:3306 |
 | phpMyAdmin | http://localhost:8080 |
@@ -73,8 +83,8 @@ Trước khi deploy thật, đổi các giá trị nhạy cảm trong `docker-co
 
 Dev dùng `docker-compose.dev.yml` override lên file production để:
 
-- Mount `./backend` vào container
-- Chạy `npm run dev` (`node --watch`) — tự restart khi sửa code
+- **Backend:** mount `./backend`, chạy `npm run dev` (`node --watch`) — tự restart khi sửa code
+- **Frontend:** dùng `Dockerfile.dev`, chạy Vite dev server tại cổng `5173` với hot reload, mount `./frontend`
 - Giữ `node_modules` trong container, tránh bị host ghi đè
 
 ```bash
@@ -93,7 +103,15 @@ Dừng:
 docker compose -f docker-compose.yml -f docker-compose.dev.yml down
 ```
 
-Sửa file trong `backend/src/` sẽ được Node `--watch` phát hiện và restart server tự động.
+URL khi chạy dev:
+
+| Dịch vụ | URL |
+|---------|-----|
+| Frontend (Vite, hot reload) | http://localhost:5173 |
+| Backend API | http://localhost:3000 |
+| phpMyAdmin | http://localhost:8080 |
+
+Sửa file trong `backend/src/` (Node `--watch`) hoặc `frontend/src/` (Vite HMR) sẽ tự động cập nhật.
 
 ## Chạy backend local (không Docker)
 
@@ -111,6 +129,16 @@ cp .env.example .env
 npm install
 npm run dev
 ```
+
+## Chạy frontend local (không Docker)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Vite chạy tại http://localhost:5173. Đặt `VITE_API_URL` nếu backend không ở `http://localhost:3000`.
 
 ## Lệnh hữu ích
 
