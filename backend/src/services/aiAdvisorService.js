@@ -9,10 +9,9 @@ const openai = env.openai.apiKey
  * Gọi OpenAI tư vấn dựa trên ngữ cảnh lịch và câu hỏi của user
  * @param {string} message - Câu hỏi của người dùng
  * @param {Object} calendarContext - Ngữ cảnh lịch bao gồm ngày dương, âm, can chi, ngày lễ, sự kiện của user
- * @param {string} intent - Ý định nhận dạng (tomorrow_advice, find_suitable_date, date_suitability, personal_schedule_advice)
  * @returns {Promise<Object>} JSON phản hồi chuẩn hóa
  */
-async function askAdvisor(message, calendarContext, intent) {
+async function askAdvisor(message, calendarContext) {
   if (!openai) {
     return getFallbackResponse('Cấu hình OpenAI API Key (OPENAI_API_KEY) chưa sẵn sàng.');
   }

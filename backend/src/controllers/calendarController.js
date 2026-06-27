@@ -1,4 +1,5 @@
 const calendarService = require('../services/calendarService');
+const { getCurrentYearMonth, getTodayDateString, isValidDateString } = require('../utils/dateTime');
 
 /**
  * API lấy tổng quan lịch tháng
@@ -9,9 +10,16 @@ async function getMonth(req, res, next) {
     const userId = req.user ? req.user.id : null;
     
     // Lấy year, month từ query hoặc mặc định thời gian hiện tại
-    const now = new Date();
-    const year = parseInt(req.query.year, 10) || now.getFullYear();
-    const month = parseInt(req.query.month, 10) || (now.getMonth() + 1);
+    const current = getCurrentYearMonth();
+    const year = parseInt(req.query.year, 10) || current.year;
+    const month = parseInt(req.query.month, 10) || current.month;
+
+    if (year < 1900 || year > 2100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Năm không hợp lệ. Phải từ 1900 đến 2100.',
+      });
+    }
 
     if (month < 1 || month > 12) {
       return res.status(400).json({
@@ -42,12 +50,10 @@ async function getDay(req, res, next) {
     // Lấy date từ query hoặc mặc định ngày hiện tại
     let dateStr = req.query.date;
     if (!dateStr) {
-      dateStr = new Date().toISOString().split('T')[0];
+      dateStr = getTodayDateString();
     }
 
-    // Validate định dạng YYYY-MM-DD đơn giản
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(dateStr)) {
+    if (!isValidDateString(dateStr)) {
       return res.status(400).json({
         success: false,
         message: 'Định dạng ngày không hợp lệ. Vui lòng sử dụng YYYY-MM-DD.'

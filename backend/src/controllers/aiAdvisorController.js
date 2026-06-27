@@ -1,6 +1,7 @@
 const aiAdvisorService = require('../services/aiAdvisorService');
 const calendarService = require('../services/calendarService');
 const { pool } = require('../config/db');
+const { getDateStringsBetween, getTodayDateString, normalizeDateInput } = require('../utils/dateTime');
 
 /**
  * API gửi tin nhắn và nhận tư vấn từ AI
@@ -24,28 +25,39 @@ async function chat(req, res, next) {
     
     if (date_range && date_range.from && date_range.to) {
       // Lấy danh sách ngày trong khoảng
-      const start = new Date(date_range.from);
-      const end = new Date(date_range.to);
-      
-      // Giới hạn khoảng ngày tối đa để tránh quá tải (ví dụ: tối đa 15 ngày cho MVP)
-      const diffTime = Math.abs(end - start);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-      
-      if (diffDays > 15) {
+      const startDate = normalizeDateInput(date_range.from);
+      const endDate = normalizeDateInput(date_range.to);
+
+      if (!startDate || !endDate || startDate > endDate) {
+        return res.status(400).json({
+          success: false,
+          message: 'Khoảng ngày tư vấn không hợp lệ.'
+        });
+      }
+
+      const rangeDates = getDateStringsBetween(startDate, endDate);
+
+      if (rangeDates.length > 15) {
         return res.status(400).json({
           success: false,
           message: 'Khoảng thời gian tư vấn tối đa là 15 ngày.'
         });
       }
 
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        datesToFetch.push(d.toISOString().split('T')[0]);
-      }
+      datesToFetch.push(...rangeDates);
     } else if (selected_date) {
-      datesToFetch.push(selected_date);
+      const selectedDate = normalizeDateInput(selected_date);
+
+      if (!selectedDate) {
+        return res.status(400).json({
+          success: false,
+          message: 'selected_date không hợp lệ. Vui lòng sử dụng YYYY-MM-DD.'
+        });
+      }
+
+      datesToFetch.push(selectedDate);
     } else {
-      // Mặc định là ngày hôm nay
-      datesToFetch.push(new Date().toISOString().split('T')[0]);
+      datesToFetch.push(getTodayDateString());
     }
 
     // 2. Gom context lịch của các ngày này
@@ -69,7 +81,7 @@ async function chat(req, res, next) {
     }
 
     // 3. Gọi AI Advisor Service
-    const aiResponse = await aiAdvisorService.askAdvisor(message, calendarContext, aiResponse => aiResponse.intent);
+    const aiResponse = await aiAdvisorService.askAdvisor(message, calendarContext);
 
     // 4. Lưu hội thoại vào Database (Transaction)
     conn = await pool.getConnection();
@@ -92,6 +104,7 @@ async function chat(req, res, next) {
         [activeConversationId, userId]
       );
       if (convCheck.length === 0) {
+        await conn.rollback();
         conn.release();
         return res.status(403).json({
           success: false,

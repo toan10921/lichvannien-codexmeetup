@@ -3,6 +3,36 @@ const aiAdvisorService = require('./aiAdvisorService');
 
 const RULE_VERSION = 'v1';
 
+async function getCachedAdvice(solarDate) {
+  const [rows] = await pool.execute(
+    'SELECT day_rating, good_for, avoid_for, summary FROM day_advice_cache WHERE solar_date = ? AND rule_version = ? LIMIT 1',
+    [solarDate, RULE_VERSION]
+  );
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const cached = rows[0];
+
+  let goodFor = [];
+  let avoidFor = [];
+
+  try {
+    goodFor = typeof cached.good_for === 'string' ? JSON.parse(cached.good_for) : (cached.good_for || []);
+    avoidFor = typeof cached.avoid_for === 'string' ? JSON.parse(cached.avoid_for) : (cached.avoid_for || []);
+  } catch (parseError) {
+    console.error('[DayAdviceService] Failed to parse good_for/avoid_for JSON from cache:', parseError);
+  }
+
+  return {
+    day_rating: cached.day_rating,
+    summary: cached.summary,
+    good_for: goodFor,
+    avoid_for: avoidFor
+  };
+}
+
 /**
  * Lấy đánh giá ngày tốt/xấu từ cache database, hoặc sinh mới từ OpenAI nếu chưa có.
  * @param {string} solarDate - Ngày dương lịch định dạng YYYY-MM-DD
@@ -13,31 +43,9 @@ const RULE_VERSION = 'v1';
 async function getOrGenerateDayAdvice(solarDate, lunarDate, canChiDay) {
   try {
     // 1. Tìm kiếm trong database cache
-    const [rows] = await pool.execute(
-      'SELECT day_rating, good_for, avoid_for, summary FROM day_advice_cache WHERE solar_date = ? AND rule_version = ? LIMIT 1',
-      [solarDate, RULE_VERSION]
-    );
-
-    if (rows.length > 0) {
-      const cached = rows[0];
-      
-      // Parse dữ liệu JSON
-      let goodFor = [];
-      let avoidFor = [];
-      
-      try {
-        goodFor = typeof cached.good_for === 'string' ? JSON.parse(cached.good_for) : (cached.good_for || []);
-        avoidFor = typeof cached.avoid_for === 'string' ? JSON.parse(cached.avoid_for) : (cached.avoid_for || []);
-      } catch (parseError) {
-        console.error('[DayAdviceService] Failed to parse good_for/avoid_for JSON from cache:', parseError);
-      }
-
-      return {
-        day_rating: cached.day_rating,
-        summary: cached.summary,
-        good_for: goodFor,
-        avoid_for: avoidFor
-      };
+    const cachedAdvice = await getCachedAdvice(solarDate);
+    if (cachedAdvice) {
+      return cachedAdvice;
     }
 
     // 2. Nếu chưa có cache, gọi AI để sinh mới
@@ -66,6 +74,13 @@ async function getOrGenerateDayAdvice(solarDate, lunarDate, canChiDay) {
 
     return advice;
   } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      const cachedAdvice = await getCachedAdvice(solarDate);
+      if (cachedAdvice) {
+        return cachedAdvice;
+      }
+    }
+
     console.error('[DayAdviceService] Error in getOrGenerateDayAdvice:', error);
     // Trả về dữ liệu mặc định khi có lỗi để không làm gián đoạn API chính
     return {
