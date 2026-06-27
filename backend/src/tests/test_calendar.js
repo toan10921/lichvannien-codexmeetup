@@ -30,14 +30,22 @@ async function run() {
       
       const lunarOk = detail.lunar_date === tc.expectedLunar;
       const canChiOk = detail.can_chi_day.includes(tc.expectedCanChi);
+      const extraFieldsOk = Boolean(
+        detail.day_quality?.label &&
+        detail.day_element?.label &&
+        detail.conflict_age?.label &&
+        Array.isArray(detail.good_hours) &&
+        detail.good_hours.length > 0
+      );
 
-      if (lunarOk && canChiOk) {
+      if (lunarOk && canChiOk && extraFieldsOk) {
         console.log(`[PASS] Ngày dương: ${tc.solar} -> Âm: ${detail.lunar_date}, Can Chi: ${detail.can_chi_day}`);
         successCount++;
       } else {
         console.log(`[FAIL] Ngày dương: ${tc.solar}`);
         console.log(`  Mong muốn: Âm lịch: ${tc.expectedLunar}, Can Chi chứa: ${tc.expectedCanChi}`);
         console.log(`  Thực tế: Âm lịch: ${detail.lunar_date}, Can Chi: ${detail.can_chi_day}`);
+        console.log(`  Trường mở rộng hợp lệ? ${extraFieldsOk}`);
       }
     } catch (error) {
       console.log(`[ERROR] Lỗi khi test ngày ${tc.solar}:`, error.message);

@@ -80,6 +80,10 @@ async function chat(req, res, next) {
           },
           holidays: detail.holidays,
           user_events: detail.events,
+          day_quality: detail.day_quality,
+          day_element: detail.day_element,
+          conflict_age: detail.conflict_age,
+          good_hours: detail.good_hours,
           day_advice: {
             source: 'calendarService.getDayDetail / dayAdviceService / lunarText',
             rating: dayAdvice.day_rating || 'neutral',

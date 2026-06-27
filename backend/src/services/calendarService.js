@@ -2,13 +2,24 @@ const { Solar } = require('lunar-javascript');
 const { pool } = require('../config/db');
 const dayAdviceService = require('./dayAdviceService');
 const eventService = require('./eventService');
-const { translateGanChi } = require('../utils/lunarText');
+const {
+  getHourRangeByZhi,
+  translateChi,
+  translateDayType,
+  translateGanChi,
+  translateLuck,
+  translateNaYin,
+  translateShengXiao,
+  translateTianShen,
+} = require('../utils/lunarText');
 const {
   getDateStringsBetween,
   getMonthBounds,
   getMonthDateTimeBounds,
   getTodayDateString,
 } = require('../utils/dateTime');
+
+const HOUR_ORDER = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
 
 function assertDateOnly(dateStr) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || '');
@@ -58,6 +69,74 @@ async function getLunarHolidayMap() {
   }, {});
 }
 
+function buildDayQuality(lunar) {
+  const type = translateDayType(lunar.getDayTianShenType());
+  return {
+    key: lunar.getDayTianShenType() === '黄道' ? 'hoang-dao' : 'hac-dao',
+    label: type === 'Hoàng đạo' ? 'Ngày hoàng đạo' : 'Ngày hắc đạo',
+    type,
+    tian_shen: translateTianShen(lunar.getDayTianShen()),
+    luck: translateLuck(lunar.getDayTianShenLuck()),
+  };
+}
+
+function buildConflictAge(lunar) {
+  const rawDesc = lunar.getChongDesc() || '';
+  const match = /\(([^)]+)\)(.+)/.exec(rawDesc);
+  const canChi = match ? translateGanChi(match[1]) : '';
+  const zodiac = translateShengXiao(match ? match[2] : lunar.getChongShengXiao());
+  const branch = translateChi(lunar.getChong());
+
+  return {
+    branch,
+    zodiac,
+    can_chi: canChi || null,
+    label: canChi
+      ? `${canChi}${zodiac ? ` (${zodiac})` : ''}`
+      : branch
+        ? `${branch}${zodiac ? ` (${zodiac})` : ''}`
+        : zodiac,
+  };
+}
+
+function buildDayElement(lunar) {
+  const raw = lunar.getDayNaYin();
+  return {
+    raw,
+    label: translateNaYin(raw),
+  };
+}
+
+function buildGoodHours(lunar) {
+  const seen = new Set();
+
+  return lunar.getTimes()
+    .filter((time) => time.getTianShenType() === '黄道' || time.getTianShenLuck() === '吉')
+    .filter((time) => {
+      const zhi = time.getZhi();
+      if (seen.has(zhi)) {
+        return false;
+      }
+      seen.add(zhi);
+      return true;
+    })
+    .sort((left, right) => HOUR_ORDER.indexOf(left.getZhi()) - HOUR_ORDER.indexOf(right.getZhi()))
+    .map((time) => {
+      const zhi = time.getZhi();
+      const label = translateChi(zhi);
+      const timeRange = getHourRangeByZhi(zhi);
+
+      return {
+        key: zhi,
+        label,
+        time_range: timeRange,
+        display_text: `${label} (${timeRange})`,
+        tian_shen: translateTianShen(time.getTianShen()),
+        luck: translateLuck(time.getTianShenLuck()),
+      };
+    });
+}
+
 async function getDayDetail(dateStr, userId) {
   const { year, month, day } = assertDateOnly(dateStr);
   const solar = Solar.fromYmd(year, month, day);
@@ -72,6 +151,10 @@ async function getDayDetail(dateStr, userId) {
   const canChiDay = translateGanChi(lunar.getDayInGanZhi());
   const canChiMonth = translateGanChi(lunar.getMonthInGanZhi());
   const canChiYear = translateGanChi(lunar.getYearInGanZhi());
+  const dayQuality = buildDayQuality(lunar);
+  const dayElement = buildDayElement(lunar);
+  const conflictAge = buildConflictAge(lunar);
+  const goodHours = buildGoodHours(lunar);
 
   const [holidays, events, dayAdvice] = await Promise.all([
     getHolidays(day, month, lunarDay, lunarMonth),
@@ -96,6 +179,10 @@ async function getDayDetail(dateStr, userId) {
     can_chi_day: canChiDay,
     can_chi_month: canChiMonth,
     can_chi_year: canChiYear,
+    day_quality: dayQuality,
+    day_element: dayElement,
+    conflict_age: conflictAge,
+    good_hours: goodHours,
     holidays,
     events,
     day_advice: dayAdvice,

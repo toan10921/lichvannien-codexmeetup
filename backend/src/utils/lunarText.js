@@ -26,9 +26,44 @@ const CHI_MAP = {
   '亥': 'Hợi',
 };
 
+const SHENG_XIAO_MAP = {
+  '鼠': 'Chuột',
+  '牛': 'Trâu',
+  '虎': 'Hổ',
+  '兔': 'Mèo',
+  '龙': 'Rồng',
+  '蛇': 'Rắn',
+  '马': 'Ngựa',
+  '羊': 'Dê',
+  '猴': 'Khỉ',
+  '鸡': 'Gà',
+  '狗': 'Chó',
+  '猪': 'Lợn',
+};
+
 const DAY_TYPE_MAP = {
   '黄道': 'Hoàng đạo',
   '黑道': 'Hắc đạo',
+};
+
+const LUCK_MAP = {
+  '吉': 'Cát',
+  '凶': 'Hung',
+};
+
+const HOUR_RANGE_MAP = {
+  '子': '23h-1h',
+  '丑': '1h-3h',
+  '寅': '3h-5h',
+  '卯': '5h-7h',
+  '辰': '7h-9h',
+  '巳': '9h-11h',
+  '午': '11h-13h',
+  '未': '13h-15h',
+  '申': '15h-17h',
+  '酉': '17h-19h',
+  '戌': '19h-21h',
+  '亥': '21h-23h',
 };
 
 const TIAN_SHEN_MAP = {
@@ -177,6 +212,39 @@ const ACTIVITY_MAP = {
   '馀事勿取': 'không nên làm thêm việc khác',
 };
 
+const NAYIN_MAP = {
+  '海中金': 'Hải Trung Kim',
+  '炉中火': 'Lư Trung Hỏa',
+  '大林木': 'Đại Lâm Mộc',
+  '路旁土': 'Lộ Bàng Thổ',
+  '剑锋金': 'Kiếm Phong Kim',
+  '山头火': 'Sơn Đầu Hỏa',
+  '涧下水': 'Giản Hạ Thủy',
+  '城头土': 'Thành Đầu Thổ',
+  '白蜡金': 'Bạch Lạp Kim',
+  '杨柳木': 'Dương Liễu Mộc',
+  '泉中水': 'Tuyền Trung Thủy',
+  '屋上土': 'Ốc Thượng Thổ',
+  '霹雳火': 'Tích Lịch Hỏa',
+  '松柏木': 'Tùng Bách Mộc',
+  '长流水': 'Trường Lưu Thủy',
+  '沙中金': 'Sa Trung Kim',
+  '山下火': 'Sơn Hạ Hỏa',
+  '平地木': 'Bình Địa Mộc',
+  '壁上土': 'Bích Thượng Thổ',
+  '金箔金': 'Kim Bạch Kim',
+  '覆灯火': 'Phú Đăng Hỏa',
+  '天河水': 'Thiên Hà Thủy',
+  '大驿土': 'Đại Trạch Thổ',
+  '钗钏金': 'Thoa Xuyến Kim',
+  '桑柘木': 'Tang Đố Mộc',
+  '大溪水': 'Đại Khê Thủy',
+  '沙中土': 'Sa Trung Thổ',
+  '天上火': 'Thiên Thượng Hỏa',
+  '石榴木': 'Thạch Lựu Mộc',
+  '大海水': 'Đại Hải Thủy',
+};
+
 function translateGanChi(ganChiStr) {
   if (!ganChiStr || ganChiStr.length < 2) {
     return ganChiStr;
@@ -188,8 +256,24 @@ function translateGanChi(ganChiStr) {
   return `${gan} ${chi}`;
 }
 
+function translateChi(chi) {
+  return CHI_MAP[chi] || chi;
+}
+
+function translateShengXiao(name) {
+  return SHENG_XIAO_MAP[name] || name;
+}
+
 function translateDayType(dayType) {
   return DAY_TYPE_MAP[dayType] || dayType;
+}
+
+function translateLuck(luck) {
+  return LUCK_MAP[luck] || luck;
+}
+
+function getHourRangeByZhi(zhi) {
+  return HOUR_RANGE_MAP[zhi] || '';
 }
 
 function translateTianShen(name) {
@@ -204,10 +288,19 @@ function translateActivity(name) {
   return ACTIVITY_MAP[name] || name;
 }
 
+function translateNaYin(name) {
+  return NAYIN_MAP[name] || name;
+}
+
 module.exports = {
   translateActivity,
+  translateChi,
   translateDayOfficer,
   translateDayType,
   translateGanChi,
+  translateLuck,
+  translateNaYin,
+  translateShengXiao,
   translateTianShen,
+  getHourRangeByZhi,
 };

@@ -63,6 +63,14 @@ function buildEventPayload(form) {
   return payload;
 }
 
+function getDayQualityClass(dayQuality) {
+  if (!dayQuality?.key) {
+    return 'calendar-status-badge';
+  }
+
+  return `calendar-status-badge calendar-status-badge--${dayQuality.key}`;
+}
+
 function EventForm({
   form,
   editingEventId,
@@ -784,6 +792,13 @@ function HomePage() {
                     ? `Tháng ${dayDetail.lunar.month} năm ${dayDetail.lunar.year}`
                     : 'Đang tải...'}
                 </p>
+                {dayDetail?.day_quality ? (
+                  <div className="calendar-summary-badge-row">
+                    <span className={getDayQualityClass(dayDetail.day_quality)}>
+                      {dayDetail.day_quality.label}
+                    </span>
+                  </div>
+                ) : null}
                 <p className="calendar-summary-secondary">
                   {dayDetail
                     ? `${dayDetail.can_chi_day} - ${dayDetail.can_chi_month} - ${dayDetail.can_chi_year}`
@@ -805,6 +820,26 @@ function HomePage() {
                 : '--'}
             </p>
             <p>
+              <strong>Phân loại ngày:</strong>{' '}
+              {dayDetail?.day_quality ? (
+                <>
+                  <span className={getDayQualityClass(dayDetail.day_quality)}>
+                    {dayDetail.day_quality.label}
+                  </span>
+                  {' · '}
+                  {dayDetail.day_quality.tian_shen}
+                </>
+              ) : '--'}
+            </p>
+            <p>
+              <strong>Mệnh ngày:</strong>{' '}
+              {dayDetail?.day_element?.label || '--'}
+            </p>
+            <p>
+              <strong>Tuổi xung:</strong>{' '}
+              {dayDetail?.conflict_age?.label || '--'}
+            </p>
+            <p>
               <strong>Ngày lễ:</strong>{' '}
               {dayDetail?.holidays?.length
                 ? dayDetail.holidays.map((holiday) => holiday.name).join(', ')
@@ -814,6 +849,19 @@ function HomePage() {
               <strong>Đánh giá ngày:</strong>{' '}
               {dayDetail?.day_advice?.summary || 'Đang tải dữ liệu...'}
             </p>
+          </div>
+
+          <div className="calendar-detail-hours">
+            <strong>Giờ hoàng đạo</strong>
+            <div className="calendar-hour-list">
+              {dayDetail?.good_hours?.length
+                ? dayDetail.good_hours.map((hour) => (
+                  <span key={hour.key} className="calendar-hour-chip">
+                    {hour.display_text}
+                  </span>
+                ))
+                : <span className="calendar-hour-chip">Đang cập nhật</span>}
+            </div>
           </div>
         </section>
 

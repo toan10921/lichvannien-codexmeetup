@@ -454,6 +454,10 @@ a:hover {
   font-weight: 700;
 }
 
+.calendar-summary-badge-row {
+  margin-top: 12px;
+}
+
 .calendar-summary-divider {
   width: 1px;
   background: rgba(35, 66, 44, 0.1);
@@ -491,6 +495,62 @@ a:hover {
   border-radius: 18px;
   background: #f6faf4;
   color: #2f4f38;
+  line-height: 1.55;
+}
+
+.calendar-status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  white-space: nowrap;
+  background: #e8f5e7;
+  color: #2c7a3b;
+}
+
+.calendar-status-badge--hoang-dao {
+  background: #dff3da;
+  color: #2d8a42;
+}
+
+.calendar-status-badge--hac-dao {
+  background: #fde8e8;
+  color: #c33c3c;
+}
+
+.calendar-detail-hours {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: #f6faf4;
+  color: #284733;
+}
+
+.calendar-detail-hours strong {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.calendar-hour-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.calendar-hour-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid rgba(35, 66, 44, 0.1);
+  color: #31533a;
+  font-size: 0.92rem;
+  font-weight: 700;
 }
 
 .calendar-content-grid {
