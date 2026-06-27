@@ -10,7 +10,6 @@ const {
   getTodayDateString,
 } = require('../utils/dateTime');
 
-<<<<<<< HEAD
 const CAN_MAP = {
   '\u7532': 'Giáp',
   '\u4e59': 'Ất',
@@ -72,11 +71,6 @@ function assertDateOnly(dateStr) {
   return { year, month, day };
 }
 
-=======
-/**
- * Lấy danh sách ngày lễ dương lịch và âm lịch trùng khớp với ngày cụ thể
- */
->>>>>>> 2a16708 (update service tính lịch)
 async function getHolidays(solarDay, solarMonth, lunarDay, lunarMonth) {
   const [rows] = await pool.execute(
     `SELECT name, description, is_official
