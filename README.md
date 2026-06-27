@@ -24,6 +24,7 @@
 | `frontend/Dockerfile` | Build frontend (Vite) rồi serve bằng nginx (production) |
 | `frontend/Dockerfile.dev` | Vite dev server có hot reload (development) |
 | `backend/sql/init.sql` | Khởi tạo database và seed dữ liệu |
+| `backend/sql/migrate_calendar_events_to_datetime.sql` | Migration đổi sự kiện từ `DATE` sang `DATETIME` |
 
 ## Chạy Production
 
@@ -43,6 +44,12 @@ Dừng và xóa luôn volume MySQL (mất dữ liệu):
 
 ```bash
 docker compose down -v
+```
+
+Nếu database đã được tạo từ schema cũ, chạy thêm migration:
+
+```bash
+docker compose exec -T mysql mysql -ulunar_user -plunar_password lunar_calendar_mvp < backend/sql/migrate_calendar_events_to_datetime.sql
 ```
 
 ### Kiểm tra

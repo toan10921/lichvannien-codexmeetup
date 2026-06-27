@@ -19,7 +19,9 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     user_id BIGINT UNSIGNED NOT NULL,
     title VARCHAR(150) NOT NULL,
     description TEXT NULL,
-    event_date DATE NOT NULL,
+    start_at DATETIME NOT NULL,
+    end_at DATETIME NULL,
+    is_all_day BOOLEAN NOT NULL DEFAULT TRUE,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
@@ -29,7 +31,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
         REFERENCES users(id)
         ON DELETE CASCADE,
 
-    INDEX idx_calendar_events_user_date (user_id, event_date)
+    INDEX idx_calendar_events_user_start (user_id, start_at)
 );
 
 CREATE TABLE IF NOT EXISTS holidays (

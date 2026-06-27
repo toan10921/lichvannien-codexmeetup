@@ -299,7 +299,7 @@ Chatbot dùng dữ liệu ngày + lịch cá nhân để trả lời
 ```text
 1. Người dùng chọn một ngày trên lịch.
 2. Người dùng bấm nút Thêm sự kiện.
-3. Người dùng nhập tiêu đề, mô tả và ngày diễn ra.
+3. Người dùng nhập tiêu đề, mô tả và thời gian bắt đầu/kết thúc.
 4. Hệ thống kiểm tra dữ liệu.
 5. Hệ thống lưu sự kiện gắn với user_id hiện tại.
 6. Lịch tháng hiển thị dấu hiệu cho ngày có sự kiện.
@@ -309,7 +309,8 @@ Chatbot dùng dữ liệu ngày + lịch cá nhân để trả lời
 
 ```text
 Tiêu đề: Họp khách hàng
-Ngày: 29/06/2026
+Bắt đầu: 29/06/2026 09:00
+Kết thúc: 29/06/2026 10:30
 Mô tả: Chuẩn bị demo dự án và báo giá.
 ```
 
@@ -678,6 +679,7 @@ Không đặt API key trong frontend, mobile app hoặc source public.
 
 - Không lưu toàn bộ lịch âm trong database: ngày âm nên được tính bằng thư viện hoặc service chuyển đổi ngày.
 - Không tạo bảng `notes`: ghi chú có thể được lưu bằng `description` trong bảng sự kiện.
+- Sự kiện cá nhân dùng `DATETIME` thay vì chỉ `DATE` để hỗ trợ gợi ý theo giờ và tránh xung đột thời gian trong cùng một ngày.
 - Không tạo bảng `user_settings` trong MVP: dùng tiếng Việt, múi giờ `Asia/Ho_Chi_Minh`, giao diện mặc định.
 - Dùng cache ngày tốt/xấu theo ngày để hạn chế gọi AI lặp lại.
 - Dữ liệu tư vấn chung theo ngày có thể dùng chung; tư vấn liên quan sự kiện cá nhân chỉ dùng trong context của người dùng đó.
@@ -746,7 +748,9 @@ CREATE TABLE calendar_events (
     user_id BIGINT UNSIGNED NOT NULL,
     title VARCHAR(150) NOT NULL,
     description TEXT NULL,
-    event_date DATE NOT NULL,
+    start_at DATETIME NOT NULL,
+    end_at DATETIME NULL,
+    is_all_day BOOLEAN NOT NULL DEFAULT TRUE,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
@@ -756,7 +760,7 @@ CREATE TABLE calendar_events (
         REFERENCES users(id)
         ON DELETE CASCADE,
 
-    INDEX idx_calendar_events_user_date (user_id, event_date)
+    INDEX idx_calendar_events_user_start (user_id, start_at)
 );
 ```
 
@@ -1001,7 +1005,10 @@ GET    /api/calendar/day?date=2026-07-15
     {
       "id": 12,
       "title": "Họp khách hàng",
-      "description": "Chốt yêu cầu giao diện"
+      "description": "Chốt yêu cầu giao diện",
+      "start_at": "2026-07-15 09:00:00",
+      "end_at": "2026-07-15 10:30:00",
+      "is_all_day": false
     }
   ],
   "day_advice": {
@@ -1035,7 +1042,9 @@ DELETE /api/events/{id}
 {
   "title": "Họp khách hàng",
   "description": "Chuẩn bị demo và báo giá",
-  "event_date": "2026-07-15"
+  "start_at": "2026-07-15 09:00:00",
+  "end_at": "2026-07-15 10:30:00",
+  "is_all_day": false
 }
 ```
 
