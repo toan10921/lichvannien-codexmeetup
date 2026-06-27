@@ -374,6 +374,7 @@ async function askAdvisor(message, calendarContext, conversationHistory = [], op
             calendar_context: calendarContext,
             request_context: {
               mode: options.contextMode || 'single_date',
+              resolved_scope: options.resolvedScope || null,
             },
             question: message,
           }),
@@ -514,6 +515,7 @@ Quy tắc ngày dương - ngày âm bắt buộc:
 
 Quy tắc hội thoại và follow-up:
 1. Nếu request_context.mode là "date_suggestion" hoặc người dùng hỏi "ngày nào phù hợp", "vậy ngày nào phù hợp", "ngày nào tốt", hãy hiểu đây là yêu cầu tìm ngày phù hợp trong calendar_context nhiều ngày.
+1b. Nếu request_context.mode là "date_range", hãy tóm tắt hoặc so sánh trong đúng phạm vi resolved_scope đã được cung cấp, không tự mở rộng sang ngày khác ngoài calendar_context.
 2. Khi tìm ngày phù hợp, không được lặp lại nguyên văn đánh giá của ngày trước đó. Phải so sánh các ngày trong calendar_context hiện tại và trả về suggested_dates.
 3. Dùng conversation history để hiểu hoạt động người dùng đang hỏi trước đó, ví dụ mua nhà, ký hợp đồng, khai trương, chuyển nhà. Nếu hoạt động không rõ, nói rõ giả định trong answer.
 4. Nếu có nhiều ngày, ưu tiên ngày có day_advice.rating = "favorable"; nếu không có, chọn ngày "neutral" có good_for phù hợp nhất và giải thích vì sao chỉ ở mức tham khảo.
@@ -531,6 +533,7 @@ Quy tắc dùng day_advice:
 
 Nguyên tắc trả lời bắt buộc:
 1. Mọi đánh giá đều mang tính tham khảo, không khẳng định kết quả chắc chắn trong tương lai.
+1b. Nếu resolved_scope là một khoảng ngày hoặc một tháng, phải bám đúng khoảng đó; nếu câu hỏi gợi ý phạm vi lớn hơn dữ liệu hiện có, phải nói rõ giới hạn phạm vi thay vì tự suy đoán.
 2. Không cam kết tài lộc, sức khỏe, vận mệnh hay thành công tuyệt đối.
 3. Không thay thế tư vấn tài chính, pháp lý hoặc y tế chuyên nghiệp.
 4. Ưu tiên lời khuyên thực tế: chuẩn bị kỹ, lập kế hoạch, kiểm tra tài liệu, quản lý thời gian, xác nhận thông tin rõ ràng.

@@ -154,6 +154,24 @@ function isPlannerActionRunning(plannerActionKey, action, itemId) {
   return plannerActionKey === buildPlannerActionKey(action, itemId);
 }
 
+function createDefaultAdvisorRange(anchorDate) {
+  return {
+    from: anchorDate,
+    to: addDaysToDate(anchorDate, 6),
+  };
+}
+
+function getAdvisorScopeOptions() {
+  return [
+    { value: 'auto', label: 'Tự hiểu theo câu hỏi' },
+    { value: 'selected_date', label: 'Chỉ ngày đang chọn' },
+    { value: 'next_7_days', label: '7 ngày tới' },
+    { value: 'this_month', label: 'Cả tháng hiện tại' },
+    { value: 'next_month', label: 'Tháng tới' },
+    { value: 'custom_range', label: 'Khoảng ngày tùy chỉnh' },
+  ];
+}
+
 function PlannerComposer({
   mode,
   onModeChange,
@@ -615,6 +633,13 @@ function AdvisorReplyContent({ reply }) {
         <span>{reply.disclaimer}</span>
       </div>
 
+      {reply.resolved_scope?.label ? (
+        <div className="advisor-reply__scope">
+          <span>Phạm vi đang phân tích</span>
+          <strong>{reply.resolved_scope.label}</strong>
+        </div>
+      ) : null}
+
       {reply.date_intro ? (
         <p className="advisor-reply__intro">{reply.date_intro}</p>
       ) : null}
@@ -715,6 +740,8 @@ function AdvisorTypingMessage({ advisorDate }) {
 
 function AdvisorPanel({
   advisorDate,
+  advisorScope,
+  advisorRange,
   advisorForm,
   advisorMessages,
   advisorError,
@@ -723,10 +750,13 @@ function AdvisorPanel({
   onOpen,
   onClose,
   onDateChange,
+  onScopeChange,
+  onRangeChange,
   onChange,
   onSubmit,
 }) {
   const chatLogRef = useRef(null);
+  const advisorScopeOptions = useMemo(() => getAdvisorScopeOptions(), []);
 
   useEffect(() => {
     if (!isOpen || !chatLogRef.current) {
@@ -764,7 +794,7 @@ function AdvisorPanel({
           <div className="advisor-popup__header">
             <div>
               <p className="calendar-section-label">AI advisor</p>
-              <h3>Hỏi nhanh theo ngày</h3>
+              <h3>Hỏi theo ngày / khoảng ngày</h3>
             </div>
 
             <button
@@ -779,18 +809,57 @@ function AdvisorPanel({
 
           <div className="advisor-popup__body">
             <div className="advisor-popup__context">
-              <label className="advisor-date-field">
-                <span>Ngày tư vấn</span>
-                <div className="advisor-date-field__row">
-                  <input
-                    type="date"
-                    value={advisorDate}
+              <div className="advisor-context-grid">
+                <label className="advisor-date-field">
+                  <span>Ngày gốc để neo phân tích</span>
+                  <div className="advisor-date-field__row">
+                    <input
+                      type="date"
+                      value={advisorDate}
+                      disabled={advisorLoading}
+                      onChange={(event) => onDateChange(event.target.value)}
+                    />
+                    <strong>{formatShortDate(advisorDate)}</strong>
+                  </div>
+                </label>
+
+                <label className="advisor-date-field">
+                  <span>Phạm vi tư vấn</span>
+                  <select
+                    value={advisorScope}
                     disabled={advisorLoading}
-                    onChange={(event) => onDateChange(event.target.value)}
-                  />
-                  <strong>{formatShortDate(advisorDate)}</strong>
+                    onChange={(event) => onScopeChange(event.target.value)}
+                  >
+                    {advisorScopeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {advisorScope === 'custom_range' ? (
+                <div className="advisor-range-grid">
+                  <label className="advisor-date-field">
+                    <span>Từ ngày</span>
+                    <input
+                      type="date"
+                      value={advisorRange.from}
+                      disabled={advisorLoading}
+                      onChange={(event) => onRangeChange('from', event.target.value)}
+                    />
+                  </label>
+
+                  <label className="advisor-date-field">
+                    <span>Đến ngày</span>
+                    <input
+                      type="date"
+                      value={advisorRange.to}
+                      disabled={advisorLoading}
+                      onChange={(event) => onRangeChange('to', event.target.value)}
+                    />
+                  </label>
                 </div>
-              </label>
+              ) : null}
             </div>
 
             <div
@@ -818,7 +887,7 @@ function AdvisorPanel({
                 rows="3"
                 value={advisorForm}
                 onChange={onChange}
-                placeholder="Ví dụ: Ngày này tôi nên ưu tiên việc gì? Có phù hợp để ký hợp đồng không?"
+                placeholder="Ví dụ: Tháng tới ngày nào phù hợp để ký hợp đồng? Trong tháng này có gì cần lưu ý?"
               />
 
               {advisorError ? (
@@ -912,6 +981,8 @@ function HomePage() {
 
   const [advisorForm, setAdvisorForm] = useState('');
   const [advisorDate, setAdvisorDate] = useState(today);
+  const [advisorScope, setAdvisorScope] = useState('auto');
+  const [advisorRange, setAdvisorRange] = useState(createDefaultAdvisorRange(today));
   const [advisorMessages, setAdvisorMessages] = useState([]);
   const [advisorConversationId, setAdvisorConversationId] = useState(null);
   const [advisorLoading, setAdvisorLoading] = useState(false);
@@ -1031,7 +1102,12 @@ function HomePage() {
 
   useEffect(() => {
     setAdvisorDate(selectedDate);
-  }, [selectedDate]);
+    setAdvisorRange((current) => (
+      advisorScope === 'custom_range'
+        ? current
+        : createDefaultAdvisorRange(selectedDate)
+    ));
+  }, [advisorScope, selectedDate]);
 
   useEffect(() => {
     if (!isAdvisorOpen) {
@@ -1154,6 +1230,22 @@ function HomePage() {
     if (nextMode !== 'fixed' && editingEventId) {
       resetEventForm();
     }
+  }
+
+  function handleAdvisorScopeChange(nextScope) {
+    setAdvisorScope(nextScope);
+    setAdvisorError('');
+
+    if (nextScope === 'custom_range') {
+      setAdvisorRange(createDefaultAdvisorRange(advisorDate));
+    }
+  }
+
+  function handleAdvisorRangeChange(field, value) {
+    setAdvisorRange((current) => ({
+      ...current,
+      [field]: value,
+    }));
   }
 
   function handleEditEvent(event) {
@@ -1312,6 +1404,11 @@ function HomePage() {
       return;
     }
 
+    if (advisorScope === 'custom_range' && (!advisorRange.from || !advisorRange.to)) {
+      setAdvisorError('Vui lòng chọn đầy đủ khoảng ngày cần tư vấn.');
+      return;
+    }
+
     setAdvisorLoading(true);
     setAdvisorError('');
     setAdvisorMessages((current) => [
@@ -1325,11 +1422,21 @@ function HomePage() {
     ]);
 
     try {
-      const response = await advisorApi.chat(token, {
+      const payload = {
         conversation_id: advisorConversationId,
         message,
         selected_date: requestDate,
-      });
+        scope: advisorScope,
+      };
+
+      if (advisorScope === 'custom_range') {
+        payload.date_range = {
+          from: advisorRange.from,
+          to: advisorRange.to,
+        };
+      }
+
+      const response = await advisorApi.chat(token, payload);
 
       setAdvisorConversationId(response.data.conversation_id);
       setAdvisorMessages((current) => [
@@ -1602,6 +1709,8 @@ function HomePage() {
 
             <AdvisorPanel
               advisorDate={advisorDate}
+              advisorScope={advisorScope}
+              advisorRange={advisorRange}
               advisorForm={advisorForm}
               advisorMessages={advisorMessages}
               advisorError={advisorError}
@@ -1610,6 +1719,8 @@ function HomePage() {
               onOpen={() => setIsAdvisorOpen(true)}
               onClose={() => setIsAdvisorOpen(false)}
               onDateChange={setAdvisorDate}
+              onScopeChange={handleAdvisorScopeChange}
+              onRangeChange={handleAdvisorRangeChange}
               onChange={(event) => setAdvisorForm(event.target.value)}
               onSubmit={handleAdvisorSubmit}
             />

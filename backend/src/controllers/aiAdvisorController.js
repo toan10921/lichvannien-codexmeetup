@@ -5,11 +5,21 @@ const AppError = require('../utils/AppError');
 const {
   addDays,
   getDateStringsBetween,
+  getMonthBounds,
   getTodayDateString,
   normalizeDateInput,
 } = require('../utils/dateTime');
 
-const MAX_ADVISOR_RANGE_DAYS = 15;
+const MAX_ADVISOR_RANGE_DAYS = 31;
+const DEFAULT_SUGGESTION_RANGE_DAYS = 15;
+const VALID_ADVISOR_SCOPES = new Set([
+  'auto',
+  'selected_date',
+  'next_7_days',
+  'this_month',
+  'next_month',
+  'custom_range',
+]);
 
 function normalizeVietnameseSearchText(value) {
   return String(value || '')
@@ -33,6 +43,130 @@ function isSuitableDateQuestion(message) {
     normalized.includes('chon ngay nao') ||
     normalized.includes('de xuat ngay')
   );
+}
+
+function looksLikeRangeQuestion(message) {
+  const normalized = normalizeVietnameseSearchText(message);
+
+  return (
+    normalized.includes('trong thang') ||
+    normalized.includes('ca thang') ||
+    normalized.includes('tong quan') ||
+    normalized.includes('co gi can luu y') ||
+    normalized.includes('nhung ngay nao') ||
+    normalized.includes('giai doan nao')
+  );
+}
+
+function formatDisplayDate(dateStr) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || '');
+
+  if (!match) {
+    return dateStr || '';
+  }
+
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+function getAnchorDate(selectedDate) {
+  const normalizedSelectedDate = selectedDate
+    ? normalizeDateInput(selectedDate)
+    : getTodayDateString();
+
+  return normalizedSelectedDate || null;
+}
+
+function shiftYearMonth(year, month, offset) {
+  const date = new Date(Date.UTC(year, month - 1 + offset, 1));
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+  };
+}
+
+function buildScopeRange(scope, anchorDate) {
+  if (scope === 'selected_date') {
+    return {
+      from: anchorDate,
+      to: anchorDate,
+      label: `Ngày ${formatDisplayDate(anchorDate)}`,
+    };
+  }
+
+  if (scope === 'next_7_days') {
+    const endDate = addDays(anchorDate, 6);
+    return {
+      from: anchorDate,
+      to: endDate,
+      label: `7 ngày tới (${formatDisplayDate(anchorDate)} → ${formatDisplayDate(endDate)})`,
+    };
+  }
+
+  const [anchorYear, anchorMonth] = anchorDate.split('-').map(Number);
+
+  if (scope === 'this_month') {
+    const { startDate, endDate } = getMonthBounds(anchorYear, anchorMonth);
+    return {
+      from: startDate,
+      to: endDate,
+      label: `Tháng ${anchorMonth}/${anchorYear} (${formatDisplayDate(startDate)} → ${formatDisplayDate(endDate)})`,
+    };
+  }
+
+  if (scope === 'next_month') {
+    const shifted = shiftYearMonth(anchorYear, anchorMonth, 1);
+    const { startDate, endDate } = getMonthBounds(shifted.year, shifted.month);
+    return {
+      from: startDate,
+      to: endDate,
+      label: `Tháng ${shifted.month}/${shifted.year} (${formatDisplayDate(startDate)} → ${formatDisplayDate(endDate)})`,
+    };
+  }
+
+  return null;
+}
+
+function detectScopeFromMessage(message) {
+  const normalized = normalizeVietnameseSearchText(message);
+
+  if (
+    normalized.includes('thang toi') ||
+    normalized.includes('thang sau') ||
+    normalized.includes('thang ke tiep')
+  ) {
+    return 'next_month';
+  }
+
+  if (normalized.includes('thang nay')) {
+    return 'this_month';
+  }
+
+  if (
+    normalized.includes('7 ngay toi') ||
+    normalized.includes('7 ngay nua') ||
+    normalized.includes('tuan toi') ||
+    normalized.includes('tuan sau')
+  ) {
+    return 'next_7_days';
+  }
+
+  return null;
+}
+
+function resolveContextMode(message, datesCount) {
+  if (datesCount <= 1) {
+    return 'single_date';
+  }
+
+  if (isSuitableDateQuestion(message)) {
+    return 'date_suggestion';
+  }
+
+  if (looksLikeRangeQuestion(message)) {
+    return 'date_range';
+  }
+
+  return 'date_range';
 }
 
 function buildLunarDisplay(detail) {
@@ -72,7 +206,9 @@ async function loadConversationHistory(conversationId, userId) {
   return messages;
 }
 
-function resolveAdvisorDates({ dateRange, selectedDate, message }) {
+function resolveAdvisorDates({ dateRange, selectedDate, message, scope }) {
+  const normalizedScope = VALID_ADVISOR_SCOPES.has(scope) ? scope : 'auto';
+
   if (dateRange && dateRange.from && dateRange.to) {
     const startDate = normalizeDateInput(dateRange.from);
     const endDate = normalizeDateInput(dateRange.to);
@@ -92,14 +228,21 @@ function resolveAdvisorDates({ dateRange, selectedDate, message }) {
     }
 
     return {
-      contextMode: rangeDates.length > 1 ? 'date_suggestion' : 'single_date',
+      contextMode: resolveContextMode(message, rangeDates.length),
       datesToFetch: rangeDates,
+      resolvedScope: {
+        type: 'custom_range',
+        from: startDate,
+        to: endDate,
+        anchor_date: getAnchorDate(selectedDate),
+        label: `Khoảng ngày ${formatDisplayDate(startDate)} → ${formatDisplayDate(endDate)}`,
+        source: normalizedScope === 'custom_range' ? 'ui_scope' : 'request_range',
+        days_count: rangeDates.length,
+      },
     };
   }
 
-  const normalizedSelectedDate = selectedDate
-    ? normalizeDateInput(selectedDate)
-    : getTodayDateString();
+  const normalizedSelectedDate = getAnchorDate(selectedDate);
 
   if (!normalizedSelectedDate) {
     return {
@@ -107,18 +250,83 @@ function resolveAdvisorDates({ dateRange, selectedDate, message }) {
     };
   }
 
+  if (normalizedScope !== 'auto') {
+    if (normalizedScope === 'custom_range') {
+      return {
+        error: 'Vui lòng chọn khoảng ngày đầy đủ cho chế độ tùy chỉnh.',
+      };
+    }
+
+    const range = buildScopeRange(normalizedScope, normalizedSelectedDate);
+    const rangeDates = getDateStringsBetween(range.from, range.to);
+
+    return {
+      contextMode: resolveContextMode(message, rangeDates.length),
+      datesToFetch: rangeDates,
+      resolvedScope: {
+        type: normalizedScope,
+        from: range.from,
+        to: range.to,
+        anchor_date: normalizedSelectedDate,
+        label: range.label,
+        source: 'ui_scope',
+        days_count: rangeDates.length,
+      },
+    };
+  }
+
+  const messageScope = detectScopeFromMessage(message);
+
+  if (messageScope) {
+    const range = buildScopeRange(messageScope, normalizedSelectedDate);
+    const rangeDates = getDateStringsBetween(range.from, range.to);
+
+    return {
+      contextMode: resolveContextMode(message, rangeDates.length),
+      datesToFetch: rangeDates,
+      resolvedScope: {
+        type: messageScope,
+        from: range.from,
+        to: range.to,
+        anchor_date: normalizedSelectedDate,
+        label: range.label,
+        source: 'message',
+        days_count: rangeDates.length,
+      },
+    };
+  }
+
   if (isSuitableDateQuestion(message)) {
-    const endDate = addDays(normalizedSelectedDate, MAX_ADVISOR_RANGE_DAYS - 1);
+    const endDate = addDays(normalizedSelectedDate, DEFAULT_SUGGESTION_RANGE_DAYS - 1);
+    const rangeDates = getDateStringsBetween(normalizedSelectedDate, endDate);
 
     return {
       contextMode: 'date_suggestion',
-      datesToFetch: getDateStringsBetween(normalizedSelectedDate, endDate),
+      datesToFetch: rangeDates,
+      resolvedScope: {
+        type: 'auto_suggestion_window',
+        from: normalizedSelectedDate,
+        to: endDate,
+        anchor_date: normalizedSelectedDate,
+        label: `15 ngày tham chiếu (${formatDisplayDate(normalizedSelectedDate)} → ${formatDisplayDate(endDate)})`,
+        source: 'auto_suggestion_window',
+        days_count: rangeDates.length,
+      },
     };
   }
 
   return {
     contextMode: 'single_date',
     datesToFetch: [normalizedSelectedDate],
+    resolvedScope: {
+      type: 'selected_date',
+      from: normalizedSelectedDate,
+      to: normalizedSelectedDate,
+      anchor_date: normalizedSelectedDate,
+      label: `Ngày ${formatDisplayDate(normalizedSelectedDate)}`,
+      source: 'auto_single_date',
+      days_count: 1,
+    },
   };
 }
 
@@ -130,7 +338,7 @@ async function chat(req, res, next) {
   let conn;
   try {
     const userId = req.user.id;
-    const { conversation_id, message, selected_date, date_range } = req.body;
+    const { conversation_id, message, selected_date, date_range, scope } = req.body;
 
     if (!message || !message.trim()) {
       return res.status(400).json({
@@ -145,6 +353,7 @@ async function chat(req, res, next) {
       dateRange: date_range,
       selectedDate: selected_date,
       message,
+      scope,
     });
 
     if (resolvedDates.error) {
@@ -154,7 +363,7 @@ async function chat(req, res, next) {
       });
     }
 
-    const { contextMode, datesToFetch } = resolvedDates;
+    const { contextMode, datesToFetch, resolvedScope } = resolvedDates;
 
     // 2. Gom context lịch của các ngày này
     const calendarContext = [];
@@ -209,7 +418,7 @@ async function chat(req, res, next) {
       message,
       calendarContext,
       conversationHistory,
-      { contextMode },
+      { contextMode, resolvedScope },
     );
 
     // 4. Lưu hội thoại vào Database (Transaction)
@@ -242,6 +451,7 @@ async function chat(req, res, next) {
       referenced_dates: aiResponse.referenced_dates || [],
       date_intro: aiResponse.date_intro || '',
       context_mode: contextMode,
+      resolved_scope: resolvedScope,
       disclaimer: aiResponse.disclaimer,
       context_dates: datesToFetch,
     });
@@ -265,6 +475,8 @@ async function chat(req, res, next) {
       data: {
         conversation_id: Number(activeConversationId),
         ...aiResponse,
+        context_mode: contextMode,
+        resolved_scope: resolvedScope,
       },
     });
   } catch (error) {

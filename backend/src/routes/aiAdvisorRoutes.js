@@ -39,6 +39,10 @@ const chatRules = [
     .optional({ nullable: true })
     .custom(isValidDateOnly)
     .withMessage('Selected date must use YYYY-MM-DD'),
+  body('scope')
+    .optional({ nullable: true })
+    .isIn(['auto', 'selected_date', 'next_7_days', 'this_month', 'next_month', 'custom_range'])
+    .withMessage('Scope is invalid'),
   body('date_range')
     .optional({ nullable: true })
     .isObject()

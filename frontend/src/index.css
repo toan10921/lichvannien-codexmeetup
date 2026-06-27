@@ -395,6 +395,7 @@ a:hover {
 .calendar-event-form textarea,
 .calendar-advisor-form textarea,
 .advisor-date-field input,
+.advisor-date-field select,
 .calendar-selectors select {
   width: 100%;
   border: 1px solid rgba(35, 66, 44, 0.12);
@@ -1120,6 +1121,21 @@ a:hover {
   background: #f8fbf7;
 }
 
+.advisor-context-grid,
+.advisor-range-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.advisor-context-grid {
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+}
+
+.advisor-range-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 12px;
+}
+
 .advisor-date-field {
   display: grid;
   gap: 8px;
@@ -1263,6 +1279,26 @@ a:hover {
 
 .advisor-reply__header strong {
   color: #226f5a;
+}
+
+.advisor-reply__scope {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #eef5ef;
+  color: #305238;
+}
+
+.advisor-reply__scope span {
+  color: #64796a;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.advisor-reply__scope strong {
+  color: #173b45;
+  font-size: 0.94rem;
 }
 
 .advisor-reply__intro {
@@ -1488,6 +1524,11 @@ a:hover {
 
   .advisor-chat-log {
     min-height: 180px;
+  }
+
+  .advisor-context-grid,
+  .advisor-range-grid {
+    grid-template-columns: 1fr;
   }
 }
 
