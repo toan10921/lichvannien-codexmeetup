@@ -34,7 +34,9 @@ const loginRules = [
     .notEmpty()
     .withMessage('Email is required')
     .isEmail()
-    .withMessage('Email is invalid'),
+    .withMessage('Email is invalid')
+    .isLength({ max: 150 })
+    .withMessage('Email must be at most 150 characters'),
   body('password').notEmpty().withMessage('Password is required'),
 ];
 

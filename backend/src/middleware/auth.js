@@ -13,9 +13,14 @@ function authenticate(req, res, next) {
 
   try {
     const payload = jwt.verify(token, env.jwt.secret);
+
+    if (!payload.sub) {
+      throw new Error('Missing token subject');
+    }
+
     req.user = {
       id: payload.sub,
-      email: payload.email,
+      email: payload.email || null,
     };
     next();
   } catch {

@@ -1,58 +1,345 @@
 :root {
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  color: #1a1a2e;
-  background-color: #f4f5fb;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #17202a;
+  background: #f5f7fa;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  min-height: 100%;
+}
+
 body {
-  margin: 0;
   min-height: 100vh;
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+a {
+  color: #245f99;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.screen-center,
+.auth-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.loading-panel,
+.auth-panel {
+  background: #ffffff;
+  border: 1px solid #dde5ee;
+  border-radius: 8px;
+  box-shadow: 0 18px 45px rgba(23, 32, 42, 0.08);
+}
+
+.loading-panel {
+  width: min(100%, 360px);
+  padding: 22px;
+  color: #425466;
+  text-align: center;
+}
+
+.auth-panel {
+  width: min(100%, 430px);
+  padding: 32px;
+}
+
+.brand-lockup {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 12px;
+  min-width: 0;
 }
 
-.app {
+.brand-lockup.compact {
+  gap: 10px;
+}
+
+.brand-mark {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #173b45;
+  color: #ffffff;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.brand-lockup.compact .brand-mark {
+  width: 38px;
+  height: 38px;
+  flex-basis: 38px;
+}
+
+.brand-name {
+  min-width: 0;
+  color: #17202a;
+  font-size: 1rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.auth-heading {
+  margin: 34px 0 24px;
+}
+
+.auth-heading h1,
+.section-heading h1 {
+  margin: 0;
+  color: #17202a;
+  font-size: 1.85rem;
+  line-height: 1.15;
+}
+
+.auth-heading p {
+  margin: 8px 0 0;
+  color: #667085;
+  line-height: 1.55;
+}
+
+.auth-form {
+  display: grid;
+  gap: 16px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 7px;
+  color: #344054;
+  font-size: 0.93rem;
+  font-weight: 700;
+}
+
+.auth-form input {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid #c9d3df;
+  border-radius: 8px;
+  color: #17202a;
+  background: #ffffff;
+  outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.auth-form input:focus {
+  border-color: #2f7d68;
+  box-shadow: 0 0 0 3px rgba(47, 125, 104, 0.16);
+}
+
+.form-error {
+  margin: 0;
+  padding: 11px 12px;
+  border: 1px solid #f0b6a8;
+  border-radius: 8px;
+  color: #8f2f22;
+  background: #fff4f1;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.primary-button,
+.secondary-button {
+  min-height: 44px;
+  border-radius: 8px;
+  font-weight: 800;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.primary-button {
+  width: 100%;
+  border: 0;
+  color: #ffffff;
+  background: #226f5a;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: #195845;
+}
+
+.secondary-button {
+  border: 1px solid #c9d3df;
+  color: #17202a;
+  background: #ffffff;
+  padding: 0 16px;
+}
+
+.secondary-button:hover:not(:disabled) {
+  border-color: #2f7d68;
+}
+
+.primary-button:active:not(:disabled),
+.secondary-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.auth-switch {
+  margin: 22px 0 0;
+  color: #667085;
+  line-height: 1.5;
   text-align: center;
-  padding: 2.5rem 3rem;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(26, 26, 46, 0.08);
-  max-width: 480px;
 }
 
-.app h1 {
-  margin: 0 0 0.5rem;
-  font-size: 1.9rem;
-  color: #5b34c0;
+.app-shell {
+  min-height: 100vh;
+  background: #f5f7fa;
 }
 
-.app p {
-  margin: 0 0 1.75rem;
-  color: #555;
-}
-
-.status-card {
+.topbar {
+  min-height: 72px;
   display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 1rem 1.25rem;
-  background: #f4f5fb;
-  border-radius: 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 28px;
+  border-bottom: 1px solid #dde5ee;
+  background: #ffffff;
 }
 
-.status-label {
-  font-size: 0.8rem;
+.session-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  min-width: 0;
+}
+
+.session-name {
+  max-width: 220px;
+  color: #344054;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace {
+  width: min(100%, 1120px);
+  margin: 0 auto;
+  padding: 34px 28px;
+}
+
+.workspace-panel {
+  padding: 0;
+}
+
+.section-heading {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.section-heading span {
+  color: #226f5a;
+  font-size: 0.82rem;
+  font-weight: 900;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #888;
 }
 
-.status-card strong {
-  font-size: 1.05rem;
-  color: #2e7d32;
+.session-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+}
+
+.session-grid div {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #dde5ee;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.session-grid dt {
+  margin: 0 0 6px;
+  color: #667085;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.session-grid dd {
+  margin: 0;
+  color: #17202a;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .auth-panel {
+    padding: 24px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 16px 20px;
+  }
+
+  .session-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .workspace {
+    padding: 22px 16px;
+  }
+
+  .session-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .screen-center,
+  .auth-screen {
+    padding: 14px;
+  }
+
+  .auth-heading h1,
+  .section-heading h1 {
+    font-size: 1.55rem;
+  }
+
+  .session-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .session-name {
+    max-width: 100%;
+  }
 }
