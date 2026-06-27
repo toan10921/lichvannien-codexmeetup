@@ -1,5 +1,15 @@
 require('dotenv').config();
 
+function readOpenAiApiKey() {
+  const apiKey = process.env.OPENAI_API_KEY || '';
+
+  if (!apiKey || apiKey === 'your_openai_api_key_here') {
+    return '';
+  }
+
+  return apiKey;
+}
+
 const env = {
   port: Number(process.env.PORT) || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -15,7 +25,7 @@ const env = {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
   openai: {
-    apiKey: process.env.OPENAI_API_KEY || '',
+    apiKey: readOpenAiApiKey(),
     model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
   },
 };

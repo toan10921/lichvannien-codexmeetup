@@ -87,4 +87,28 @@ export const authApi = {
   },
 };
 
+export const advisorApi = {
+  chat(token, data) {
+    return apiRequest('/api/advisor/chat', {
+      method: 'POST',
+      token,
+      body: data,
+    });
+  },
+
+  listConversations(token) {
+    return apiRequest('/api/advisor/conversations', {
+      method: 'GET',
+      token,
+    });
+  },
+
+  getMessages(token, conversationId) {
+    return apiRequest(`/api/advisor/conversations/${conversationId}/messages`, {
+      method: 'GET',
+      token,
+    });
+  },
+};
+
 export { API_URL };

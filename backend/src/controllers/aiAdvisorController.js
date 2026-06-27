@@ -1,6 +1,7 @@
 const aiAdvisorService = require('../services/aiAdvisorService');
 const calendarService = require('../services/calendarService');
 const { pool } = require('../config/db');
+const AppError = require('../utils/AppError');
 const { getDateStringsBetween, getTodayDateString, normalizeDateInput } = require('../utils/dateTime');
 
 /**
@@ -89,14 +90,13 @@ async function chat(req, res, next) {
 
     let activeConversationId = conversation_id;
 
-    // Nếu chưa có conversation_id, tạo mới cuộc hội thoại
     if (!activeConversationId) {
-      const title = message.length > 50 ? message.substring(0, 47) + '...' : message;
-      const [newConv] = await conn.execute(
+      const title = message.length > 50 ? `${message.slice(0, 47)}...` : message;
+      const [newConversation] = await conn.execute(
         'INSERT INTO chat_conversations (user_id, title) VALUES (?, ?)',
         [userId, title]
       );
-      activeConversationId = newConv.insertId;
+      activeConversationId = newConversation.insertId;
     } else {
       // Kiểm tra cuộc hội thoại có thuộc về user hiện tại không
       const [convCheck] = await conn.execute(
@@ -119,30 +119,37 @@ async function chat(req, res, next) {
       [activeConversationId, 'user', message]
     );
 
-    // Lưu tin nhắn của AI Assistant kèm metadata
-    const metadataStr = JSON.stringify({
+    const metadata = JSON.stringify({
       intent: aiResponse.intent,
       rating: aiResponse.rating,
-      suggested_dates: aiResponse.suggested_dates || []
+      recommended_actions: aiResponse.recommended_actions || [],
+      cautions: aiResponse.cautions || [],
+      suggested_dates: aiResponse.suggested_dates || [],
+      disclaimer: aiResponse.disclaimer,
+      context_dates: datesToFetch,
     });
 
     await conn.execute(
       'INSERT INTO chat_messages (conversation_id, role, content, metadata) VALUES (?, ?, ?, ?)',
-      [activeConversationId, 'assistant', aiResponse.answer, metadataStr]
+      [activeConversationId, 'assistant', aiResponse.answer, metadata]
+    );
+
+    await conn.execute(
+      'UPDATE chat_conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [activeConversationId]
     );
 
     await conn.commit();
     conn.release();
+    conn = null;
 
-    // 5. Trả kết quả về client
     res.json({
       success: true,
       data: {
         conversation_id: Number(activeConversationId),
-        ...aiResponse
-      }
+        ...aiResponse,
+      },
     });
-
   } catch (error) {
     if (conn) {
       await conn.rollback();
@@ -152,77 +159,70 @@ async function chat(req, res, next) {
   }
 }
 
-/**
- * Lấy danh sách các cuộc hội thoại của user
- * GET /api/advisor/conversations
- */
 async function getConversations(req, res, next) {
   try {
     const userId = req.user.id;
     const [rows] = await pool.execute(
-      'SELECT id, title, created_at FROM chat_conversations WHERE user_id = ? ORDER BY updated_at DESC',
+      `SELECT id, title, created_at, updated_at
+       FROM chat_conversations
+       WHERE user_id = ?
+       ORDER BY updated_at DESC, id DESC`,
       [userId]
     );
 
     res.json({
       success: true,
-      data: rows
+      data: rows,
     });
   } catch (error) {
     next(error);
   }
 }
 
-/**
- * Lấy lịch sử tin nhắn của một cuộc hội thoại
- * GET /api/advisor/conversations/:id/messages
- */
 async function getMessages(req, res, next) {
   try {
     const userId = req.user.id;
     const conversationId = req.params.id;
 
-    // 1. Kiểm tra tính hợp lệ của cuộc hội thoại
-    const [conv] = await pool.execute(
+    const [conversationRows] = await pool.execute(
       'SELECT id FROM chat_conversations WHERE id = ? AND user_id = ? LIMIT 1',
       [conversationId, userId]
     );
 
-    if (conv.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Không tìm thấy cuộc hội thoại hoặc bạn không có quyền truy cập.'
-      });
+    if (conversationRows.length === 0) {
+      throw new AppError('Không tìm thấy cuộc hội thoại hoặc bạn không có quyền truy cập.', 404);
     }
 
-    // 2. Lấy tin nhắn
     const [messages] = await pool.execute(
-      'SELECT id, role, content, metadata, created_at FROM chat_messages WHERE conversation_id = ? ORDER BY created_at ASC',
+      `SELECT id, role, content, metadata, created_at
+       FROM chat_messages
+       WHERE conversation_id = ?
+       ORDER BY created_at ASC, id ASC`,
       [conversationId]
     );
 
-    // Parse metadata JSON
-    const formattedMessages = messages.map(msg => {
-      let meta = null;
+    const formattedMessages = messages.map((msg) => {
+      let metadata = null;
       if (msg.metadata) {
         try {
-          meta = typeof msg.metadata === 'string' ? JSON.parse(msg.metadata) : msg.metadata;
-        } catch (e) {
-          console.error(e);
+          metadata = typeof msg.metadata === 'string' ? JSON.parse(msg.metadata) : msg.metadata;
+        } catch (error) {
+          console.error('[AIAdvisorController] Failed to parse message metadata:', error);
         }
       }
+
       return {
         id: msg.id,
         role: msg.role,
         content: msg.content,
-        metadata: meta,
-        created_at: msg.created_at
+        metadata,
+        created_at: msg.created_at,
       };
     });
 
     res.json({
       success: true,
-      data: formattedMessages
+      data: formattedMessages,
     });
   } catch (error) {
     next(error);
@@ -232,5 +232,5 @@ async function getMessages(req, res, next) {
 module.exports = {
   chat,
   getConversations,
-  getMessages
+  getMessages,
 };

@@ -85,6 +85,15 @@ Trước khi deploy thật, đổi các giá trị nhạy cảm trong `docker-co
 
 - `JWT_SECRET` — secret dài, ngẫu nhiên
 - `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD`, `DB_PASSWORD` — mật khẩu mạnh
+- `OPENAI_API_KEY` — API key dùng cho chatbot
+- `OPENAI_MODEL` — model chatbot, mặc định `gpt-4.1-mini`
+
+Khi chạy bằng Docker Compose, có thể đặt OpenAI key trong biến môi trường của shell hoặc file `.env` ở thư mục gốc project:
+
+```bash
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4.1-mini
+```
 
 ## Chạy Development
 
@@ -185,3 +194,33 @@ curl -X POST http://localhost:3000/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"name":"Nguyen Van A","email":"vana@example.com","password":"12345678"}'
 ```
+
+## API Chatbot
+
+Các endpoint chatbot yêu cầu Bearer token:
+
+| Method | Endpoint | Mục đích |
+|--------|----------|----------|
+| POST | `/api/advisor/chat` | Gửi câu hỏi và nhận tư vấn theo ngữ cảnh lịch |
+| GET | `/api/advisor/conversations` | Lấy danh sách hội thoại |
+| GET | `/api/advisor/conversations/:id/messages` | Lấy tin nhắn trong một hội thoại |
+
+Ví dụ gửi câu hỏi theo một ngày:
+
+```bash
+curl -X POST http://localhost:3000/api/advisor/chat \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Ngày này có hợp để ký hợp đồng không?","selected_date":"2026-07-15"}'
+```
+
+Ví dụ hỏi trong một khoảng ngày, tối đa 15 ngày:
+
+```bash
+curl -X POST http://localhost:3000/api/advisor/chat \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Tuần này ngày nào phù hợp để khai trương?","date_range":{"from":"2026-07-01","to":"2026-07-07"}}'
+```
+
+Nếu chưa cấu hình `OPENAI_API_KEY`, API vẫn trả fallback để frontend không bị gián đoạn.
