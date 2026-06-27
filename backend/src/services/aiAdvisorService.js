@@ -51,10 +51,239 @@ function normalizeSuggestedDates(value) {
     .filter((item) => item && typeof item === 'object')
     .map((item) => ({
       date: typeof item.date === 'string' ? item.date : '',
+      display_date: typeof item.display_date === 'string' ? item.display_date : '',
+      lunar_date: typeof item.lunar_date === 'string' ? item.lunar_date : '',
+      lunar_display: typeof item.lunar_display === 'string' ? item.lunar_display : '',
       rating: VALID_RATINGS.has(item.rating) ? item.rating : 'neutral',
       reason: typeof item.reason === 'string' ? item.reason : '',
     }))
     .filter((item) => item.date);
+}
+
+function getDayAdvice(contextItem) {
+  return contextItem?.day_advice && typeof contextItem.day_advice === 'object'
+    ? contextItem.day_advice
+    : {};
+}
+
+function getContextRating(contextItem) {
+  const dayAdvice = getDayAdvice(contextItem);
+
+  if (VALID_RATINGS.has(dayAdvice.rating)) {
+    return dayAdvice.rating;
+  }
+
+  if (VALID_RATINGS.has(contextItem?.day_rating)) {
+    return contextItem.day_rating;
+  }
+
+  return 'neutral';
+}
+
+function getRatingScore(rating) {
+  if (rating === 'favorable') {
+    return 3;
+  }
+
+  if (rating === 'neutral') {
+    return 2;
+  }
+
+  return 1;
+}
+
+function formatDisplayDate(dateStr) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || '');
+
+  if (!match) {
+    return dateStr || '';
+  }
+
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+function buildReferencedDates(calendarContext) {
+  if (!Array.isArray(calendarContext)) {
+    return [];
+  }
+
+  return calendarContext
+    .filter((item) => item && typeof item.date === 'string' && item.date.trim())
+    .map((item) => {
+      const dayAdvice = item.day_advice && typeof item.day_advice === 'object'
+        ? item.day_advice
+        : {};
+
+      return {
+        date: item.date,
+        display_date: formatDisplayDate(item.date),
+        date_intro: typeof item.date_intro === 'string' ? item.date_intro : '',
+        lunar_date: typeof item.lunar_date === 'string' ? item.lunar_date : '',
+        lunar_display: typeof item.lunar_display === 'string' ? item.lunar_display : '',
+        weekday: typeof item.weekday === 'string' ? item.weekday : '',
+        rating: getContextRating(item),
+      };
+    });
+}
+
+function answerMentionsAnyLunarDate(answer, referencedDates) {
+  return referencedDates.some((item) => (
+    (item.date_intro && answer.includes(item.date_intro)) ||
+    (item.lunar_display && answer.includes(item.lunar_display)) ||
+    (item.lunar_date && answer.includes(item.lunar_date))
+  ));
+}
+
+function buildDateMappingSentence(referencedDates) {
+  if (referencedDates.length === 0) {
+    return '';
+  }
+
+  if (referencedDates.length === 1) {
+    const [item] = referencedDates;
+    if (item.date_intro) {
+      return `${item.date_intro}.`;
+    }
+
+    if (!item.lunar_display && !item.lunar_date) {
+      return `Ngày dương ${item.display_date || item.date} chưa có dữ liệu ngày âm đầy đủ.`;
+    }
+
+    return `Ngày ${item.date} tức ${item.lunar_display || item.lunar_date}.`;
+  }
+
+  const datesWithLunar = referencedDates.filter((item) => item.lunar_date);
+  const visibleDates = datesWithLunar.slice(0, 3);
+  const suffix = datesWithLunar.length > visibleDates.length
+    ? ` và ${datesWithLunar.length - visibleDates.length} ngày khác`
+    : '';
+  const dateList = visibleDates
+    .map((item) => `${item.date} (${item.lunar_display || item.lunar_date})`)
+    .join(', ');
+
+  return dateList
+    ? `Các ngày trong dữ liệu gồm ${dateList}${suffix}.`
+    : 'Một số ngày trong dữ liệu chưa có ngày âm đầy đủ.';
+}
+
+function buildSuggestedDateReason(contextItem) {
+  const dayAdvice = getDayAdvice(contextItem);
+  const rating = getContextRating(contextItem);
+  const goodFor = toStringArray(dayAdvice.good_for || contextItem.good_for).slice(0, 3);
+  const avoidFor = toStringArray(dayAdvice.avoid_for || contextItem.avoid_for).slice(0, 2);
+  const parts = [];
+
+  if (contextItem.date_intro) {
+    parts.push(`${contextItem.date_intro}.`);
+  }
+
+  if (dayAdvice.summary || contextItem.day_summary) {
+    parts.push(dayAdvice.summary || contextItem.day_summary);
+  }
+
+  if (rating === 'favorable') {
+    parts.push('Mức đánh giá của ngày là thuận lợi hơn các ngày còn lại trong phạm vi đang xét.');
+  } else if (rating === 'neutral') {
+    parts.push('Mức đánh giá của ngày ở trạng thái trung hòa, phù hợp hơn nếu công việc đã được chuẩn bị kỹ.');
+  } else {
+    parts.push('Mức đánh giá của ngày là cần thận trọng, chỉ nên chọn nếu không có ngày thuận lợi hơn.');
+  }
+
+  if (goodFor.length > 0) {
+    parts.push(`Dữ liệu lunarText/day_advice gợi ý phù hợp với: ${goodFor.join(', ')}.`);
+  }
+
+  if (avoidFor.length > 0) {
+    parts.push(`Vẫn cần lưu ý tránh hoặc chuẩn bị kỹ với: ${avoidFor.join(', ')}.`);
+  }
+
+  return parts.join(' ');
+}
+
+function enrichSuggestedDate(suggestion, contextItem) {
+  const generatedReason = buildSuggestedDateReason(contextItem);
+  const reason = suggestion.reason && suggestion.reason.trim()
+    ? suggestion.reason.trim()
+    : generatedReason;
+  const hasLunarReason = (
+    (contextItem.date_intro && reason.includes(contextItem.date_intro)) ||
+    (contextItem.lunar_display && reason.includes(contextItem.lunar_display)) ||
+    (contextItem.lunar_date && reason.includes(contextItem.lunar_date))
+  );
+
+  return {
+    ...suggestion,
+    display_date: suggestion.display_date || formatDisplayDate(contextItem.date),
+    lunar_date: suggestion.lunar_date || contextItem.lunar_date || '',
+    lunar_display: suggestion.lunar_display || contextItem.lunar_display || '',
+    rating: VALID_RATINGS.has(suggestion.rating) ? suggestion.rating : getContextRating(contextItem),
+    reason: hasLunarReason
+      ? reason
+      : `${contextItem.date_intro ? `${contextItem.date_intro}.` : buildDateMappingSentence([{
+        date: contextItem.date,
+        display_date: formatDisplayDate(contextItem.date),
+        lunar_date: contextItem.lunar_date,
+        lunar_display: contextItem.lunar_display,
+      }])} ${reason}`.trim(),
+  };
+}
+
+function buildSuggestedDates(responseSuggestions, calendarContext, options = {}) {
+  const contextItems = Array.isArray(calendarContext) ? calendarContext : [];
+  const contextMap = new Map(contextItems.map((item) => [item.date, item]));
+  const existingDates = new Set();
+  const enrichedExisting = responseSuggestions
+    .filter((item) => contextMap.has(item.date))
+    .map((item) => {
+      existingDates.add(item.date);
+      return enrichSuggestedDate(item, contextMap.get(item.date));
+    });
+
+  if (options.contextMode !== 'date_suggestion') {
+    return enrichedExisting;
+  }
+
+  const fillerDates = contextItems
+    .filter((item) => !existingDates.has(item.date))
+    .sort((left, right) => {
+      const ratingDiff = getRatingScore(getContextRating(right)) - getRatingScore(getContextRating(left));
+
+      if (ratingDiff !== 0) {
+        return ratingDiff;
+      }
+
+      return left.date.localeCompare(right.date);
+    })
+    .slice(0, Math.max(0, 3 - enrichedExisting.length))
+    .map((item) => enrichSuggestedDate({
+      date: item.date,
+      rating: getContextRating(item),
+      reason: '',
+    }, item));
+
+  return [...enrichedExisting, ...fillerDates].slice(0, 3);
+}
+
+function attachCalendarContextToResponse(response, calendarContext, options = {}) {
+  const referencedDates = buildReferencedDates(calendarContext);
+  const suggestedDates = buildSuggestedDates(response.suggested_dates || [], calendarContext, options);
+  const dateIntro = referencedDates.length === 1 ? referencedDates[0].date_intro : '';
+  const normalized = {
+    ...response,
+    date_intro: response.date_intro || dateIntro,
+    referenced_dates: referencedDates,
+    suggested_dates: suggestedDates,
+  };
+
+  if (
+    normalized.answer &&
+    referencedDates.length > 0 &&
+    !answerMentionsAnyLunarDate(normalized.answer, referencedDates)
+  ) {
+    normalized.answer = `${buildDateMappingSentence(referencedDates)} ${normalized.answer}`;
+  }
+
+  return normalized;
 }
 
 function normalizeAdvisorResponse(raw, fallbackAnswer) {
@@ -70,6 +299,7 @@ function normalizeAdvisorResponse(raw, fallbackAnswer) {
     recommended_actions: toStringArray(source.recommended_actions),
     cautions: toStringArray(source.cautions),
     suggested_dates: normalizeSuggestedDates(source.suggested_dates),
+    referenced_dates: normalizeSuggestedDates(source.referenced_dates),
     disclaimer: typeof source.disclaimer === 'string' && source.disclaimer.trim()
       ? source.disclaimer.trim()
       : 'Thông tin chỉ mang tính tham khảo.',
@@ -108,9 +338,13 @@ function formatHistory(history) {
     }));
 }
 
-async function askAdvisor(message, calendarContext, conversationHistory = []) {
+async function askAdvisor(message, calendarContext, conversationHistory = [], options = {}) {
   if (!openai) {
-    return getFallbackResponse('Cấu hình OpenAI API Key (OPENAI_API_KEY) chưa sẵn sàng.');
+    return attachCalendarContextToResponse(
+      getFallbackResponse('Cấu hình OpenAI API Key (OPENAI_API_KEY) chưa sẵn sàng.'),
+      calendarContext,
+      options,
+    );
   }
 
   try {
@@ -123,6 +357,9 @@ async function askAdvisor(message, calendarContext, conversationHistory = []) {
           role: 'user',
           content: JSON.stringify({
             calendar_context: calendarContext,
+            request_context: {
+              mode: options.contextMode || 'single_date',
+            },
             question: message,
           }),
         },
@@ -133,10 +370,14 @@ async function askAdvisor(message, calendarContext, conversationHistory = []) {
 
     const content = response.choices?.[0]?.message?.content;
     const parsed = parseJsonObject(content);
-    return normalizeAdvisorResponse(parsed, 'Mình chưa thể tạo câu trả lời đầy đủ từ dữ liệu hiện có.');
+    return attachCalendarContextToResponse(
+      normalizeAdvisorResponse(parsed, 'Mình chưa thể tạo câu trả lời đầy đủ từ dữ liệu hiện có.'),
+      calendarContext,
+      options,
+    );
   } catch (error) {
     console.error('[AIAdvisorService] OpenAI API Error:', error);
-    return getFallbackResponse(error.message);
+    return attachCalendarContextToResponse(getFallbackResponse(error.message), calendarContext, options);
   }
 }
 
@@ -193,6 +434,18 @@ Dữ liệu calendar_context được lấy từ calendarService.getDayDetail. T
 - day_advice.avoid_for hoặc avoid_for: các việc nên thận trọng theo dữ liệu lunarText.
 - holidays và user_events: ngày lễ và lịch cá nhân có thể ảnh hưởng đến lời khuyên thực tế.
 
+Quy tắc ngày dương - ngày âm bắt buộc:
+1. Mỗi khi trả lời về một ngày cụ thể, câu trả lời phải nêu rõ theo mẫu: "Ngày 2026-06-13 tức ngày 28-4 năm Bính Ngọ...". Lấy ngày dương từ date, ngày âm từ lunar.day/lunar.month và năm âm lịch từ can_chi_detail.year.
+2. Không được tự tính hoặc tự sửa ngày âm. Chỉ dùng lunar_date, lunar_display, lunar.day, lunar.month, lunar.year và can_chi_detail.year đã được cung cấp.
+3. Nếu calendar_context có nhiều ngày, khi đề xuất hoặc so sánh ngày phải gắn từng ngày dương với ngày âm tương ứng trong answer hoặc suggested_dates.reason.
+4. Nếu thiếu lunar_date, phải nói rõ dữ liệu ngày âm chưa đầy đủ thay vì tự đoán.
+
+Quy tắc hội thoại và follow-up:
+1. Nếu request_context.mode là "date_suggestion" hoặc người dùng hỏi "ngày nào phù hợp", "vậy ngày nào phù hợp", "ngày nào tốt", hãy hiểu đây là yêu cầu tìm ngày phù hợp trong calendar_context nhiều ngày.
+2. Khi tìm ngày phù hợp, không được lặp lại nguyên văn đánh giá của ngày trước đó. Phải so sánh các ngày trong calendar_context hiện tại và trả về suggested_dates.
+3. Dùng conversation history để hiểu hoạt động người dùng đang hỏi trước đó, ví dụ mua nhà, ký hợp đồng, khai trương, chuyển nhà. Nếu hoạt động không rõ, nói rõ giả định trong answer.
+4. Nếu có nhiều ngày, ưu tiên ngày có day_advice.rating = "favorable"; nếu không có, chọn ngày "neutral" có good_for phù hợp nhất và giải thích vì sao chỉ ở mức tham khảo.
+
 Quy tắc dùng day_advice:
 1. Không được đảo ngược đánh giá ngày. Nếu day_advice.rating là "caution", không được kết luận ngày rất tốt; nếu là "favorable", vẫn chỉ nói là tương đối thuận lợi và có điều kiện chuẩn bị kỹ.
 2. Với câu hỏi về một hoạt động cụ thể, hãy so khớp ý nghĩa hoạt động đó với good_for và avoid_for:
@@ -201,7 +454,7 @@ Quy tắc dùng day_advice:
    - Nếu không khớp rõ, giữ đánh giá gần với day_advice.rating và giải thích là dữ liệu không chỉ ra trực tiếp hoạt động đó.
 3. Với câu hỏi "nên ưu tiên việc gì", recommended_actions phải dựa trên good_for, summary, user_events và các bước chuẩn bị thực tế.
 4. Với cautions, phải ưu tiên avoid_for, các xung đột lịch cá nhân và các lưu ý trong summary.
-5. Với suggested_dates, chỉ đề xuất các ngày có trong calendar_context. Lý do của từng ngày phải lấy từ day_advice.summary/good_for/avoid_for của chính ngày đó.
+5. Với suggested_dates, chỉ đề xuất các ngày có trong calendar_context. Lý do của từng ngày là bắt buộc, phải lấy từ day_advice.summary/good_for/avoid_for của chính ngày đó và nêu vì sao ngày đó phù hợp với hoạt động người dùng hỏi.
 6. Nếu thiếu day_advice hoặc context không đủ, nói rõ là dữ liệu đánh giá ngày chưa đủ, không tự suy diễn thêm từ can chi.
 
 Nguyên tắc trả lời bắt buộc:
@@ -220,8 +473,16 @@ Nguyên tắc trả lời bắt buộc:
   "suggested_dates": [
     {
       "date": "YYYY-MM-DD",
+      "lunar_date": "Dữ liệu lunar_date tương ứng trong calendar_context",
       "rating": "favorable" | "neutral" | "caution",
-      "reason": "Lý do ngày này được đề xuất"
+      "reason": "Bắt buộc. Lý do cụ thể vì sao ngày này phù hợp, có nhắc ngày âm/can chi năm, summary, good_for liên quan và lưu ý avoid_for nếu có."
+    }
+  ],
+  "referenced_dates": [
+    {
+      "date": "YYYY-MM-DD",
+      "lunar_date": "Dữ liệu lunar_date tương ứng trong calendar_context",
+      "rating": "favorable" | "neutral" | "caution"
     }
   ],
   "disclaimer": "Thông tin chỉ mang tính tham khảo."

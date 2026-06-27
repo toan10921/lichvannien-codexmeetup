@@ -164,6 +164,15 @@ function EventForm({
 }
 
 function AdvisorReplyContent({ reply }) {
+  const answer = reply.answer || '';
+  const answerWithoutIntro = reply.date_intro && answer.startsWith(reply.date_intro)
+    ? answer.slice(reply.date_intro.length).replace(/^\.\s*/, '').trim()
+    : answer;
+  const shouldShowReferencedDates = !reply.date_intro
+    && (!reply.suggested_dates || reply.suggested_dates.length === 0)
+    && reply.referenced_dates?.length > 0
+    && reply.referenced_dates.length <= 3;
+
   return (
     <div className="advisor-reply">
       <div className="advisor-reply__header">
@@ -171,7 +180,40 @@ function AdvisorReplyContent({ reply }) {
         <span>{reply.disclaimer}</span>
       </div>
 
-      <p>{reply.answer}</p>
+      {reply.date_intro ? (
+        <p className="advisor-reply__intro">{reply.date_intro}</p>
+      ) : null}
+
+      {shouldShowReferencedDates ? (
+        <div className="advisor-reply__dates" aria-label="Ngày dương và ngày âm được dùng để tư vấn">
+          {reply.referenced_dates.map((item) => (
+            <div className="advisor-reply__date" key={item.date}>
+              <span>Dương lịch {item.display_date || formatShortDate(item.date)}</span>
+              <strong>Âm lịch {item.lunar_display || item.lunar_date || 'chưa có dữ liệu'}</strong>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {answerWithoutIntro ? (
+        <p>{answerWithoutIntro}</p>
+      ) : null}
+
+      {reply.suggested_dates?.length > 0 ? (
+        <div className="advisor-suggested-dates">
+          <h4>Ngày phù hợp</h4>
+          {reply.suggested_dates.map((item) => (
+            <article className="advisor-suggested-date" key={item.date}>
+              <div className="advisor-suggested-date__header">
+                <strong>{item.date}</strong>
+                <span>{item.lunar_display || item.lunar_date || 'Chưa có ngày âm'}</span>
+                <em>{item.rating || 'neutral'}</em>
+              </div>
+              <p>{item.reason || 'Chưa có lý do chi tiết cho ngày này.'}</p>
+            </article>
+          ))}
+        </div>
+      ) : null}
 
       {reply.recommended_actions?.length > 0 ? (
         <div className="advisor-reply__section">

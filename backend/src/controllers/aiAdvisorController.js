@@ -2,7 +2,125 @@ const aiAdvisorService = require('../services/aiAdvisorService');
 const calendarService = require('../services/calendarService');
 const { pool } = require('../config/db');
 const AppError = require('../utils/AppError');
-const { getDateStringsBetween, getTodayDateString, normalizeDateInput } = require('../utils/dateTime');
+const {
+  addDays,
+  getDateStringsBetween,
+  getTodayDateString,
+  normalizeDateInput,
+} = require('../utils/dateTime');
+
+const MAX_ADVISOR_RANGE_DAYS = 15;
+
+function normalizeVietnameseSearchText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd');
+}
+
+function isSuitableDateQuestion(message) {
+  const normalized = normalizeVietnameseSearchText(message);
+
+  return (
+    normalized.includes('ngay nao phu hop') ||
+    normalized.includes('ngay nao tot') ||
+    normalized.includes('ngay nao nen') ||
+    normalized.includes('hom nao phu hop') ||
+    normalized.includes('hom nao tot') ||
+    normalized.includes('khi nao phu hop') ||
+    normalized.includes('luc nao phu hop') ||
+    normalized.includes('chon ngay nao') ||
+    normalized.includes('de xuat ngay')
+  );
+}
+
+function buildLunarDisplay(detail) {
+  const lunarMonth = detail.lunar.month < 0
+    ? `${Math.abs(detail.lunar.month)} nhuận`
+    : String(detail.lunar.month);
+
+  return `ngày ${detail.lunar.day}-${lunarMonth} năm ${detail.can_chi_year}`;
+}
+
+function buildDateIntro(detail) {
+  return `Ngày ${detail.solar_date} tức ${buildLunarDisplay(detail)}`;
+}
+
+async function loadConversationHistory(conversationId, userId) {
+  if (!conversationId) {
+    return [];
+  }
+
+  const [conversationRows] = await pool.execute(
+    'SELECT id FROM chat_conversations WHERE id = ? AND user_id = ? LIMIT 1',
+    [conversationId, userId],
+  );
+
+  if (conversationRows.length === 0) {
+    throw new AppError('Không có quyền truy cập cuộc hội thoại này.', 403);
+  }
+
+  const [messages] = await pool.execute(
+    `SELECT role, content
+       FROM chat_messages
+      WHERE conversation_id = ?
+      ORDER BY created_at ASC, id ASC`,
+    [conversationId],
+  );
+
+  return messages;
+}
+
+function resolveAdvisorDates({ dateRange, selectedDate, message }) {
+  if (dateRange && dateRange.from && dateRange.to) {
+    const startDate = normalizeDateInput(dateRange.from);
+    const endDate = normalizeDateInput(dateRange.to);
+
+    if (!startDate || !endDate || startDate > endDate) {
+      return {
+        error: 'Khoảng ngày tư vấn không hợp lệ.',
+      };
+    }
+
+    const rangeDates = getDateStringsBetween(startDate, endDate);
+
+    if (rangeDates.length > MAX_ADVISOR_RANGE_DAYS) {
+      return {
+        error: `Khoảng thời gian tư vấn tối đa là ${MAX_ADVISOR_RANGE_DAYS} ngày.`,
+      };
+    }
+
+    return {
+      contextMode: rangeDates.length > 1 ? 'date_suggestion' : 'single_date',
+      datesToFetch: rangeDates,
+    };
+  }
+
+  const normalizedSelectedDate = selectedDate
+    ? normalizeDateInput(selectedDate)
+    : getTodayDateString();
+
+  if (!normalizedSelectedDate) {
+    return {
+      error: 'selected_date không hợp lệ. Vui lòng sử dụng YYYY-MM-DD.',
+    };
+  }
+
+  if (isSuitableDateQuestion(message)) {
+    const endDate = addDays(normalizedSelectedDate, MAX_ADVISOR_RANGE_DAYS - 1);
+
+    return {
+      contextMode: 'date_suggestion',
+      datesToFetch: getDateStringsBetween(normalizedSelectedDate, endDate),
+    };
+  }
+
+  return {
+    contextMode: 'single_date',
+    datesToFetch: [normalizedSelectedDate],
+  };
+}
 
 /**
  * API gửi tin nhắn và nhận tư vấn từ AI
@@ -21,45 +139,22 @@ async function chat(req, res, next) {
       });
     }
 
-    // 1. Xác định các ngày cần lấy context
-    const datesToFetch = [];
-    
-    if (date_range && date_range.from && date_range.to) {
-      // Lấy danh sách ngày trong khoảng
-      const startDate = normalizeDateInput(date_range.from);
-      const endDate = normalizeDateInput(date_range.to);
+    const activeConversationIdFromRequest = conversation_id || null;
+    const conversationHistory = await loadConversationHistory(activeConversationIdFromRequest, userId);
+    const resolvedDates = resolveAdvisorDates({
+      dateRange: date_range,
+      selectedDate: selected_date,
+      message,
+    });
 
-      if (!startDate || !endDate || startDate > endDate) {
-        return res.status(400).json({
-          success: false,
-          message: 'Khoảng ngày tư vấn không hợp lệ.'
-        });
-      }
-
-      const rangeDates = getDateStringsBetween(startDate, endDate);
-
-      if (rangeDates.length > 15) {
-        return res.status(400).json({
-          success: false,
-          message: 'Khoảng thời gian tư vấn tối đa là 15 ngày.'
-        });
-      }
-
-      datesToFetch.push(...rangeDates);
-    } else if (selected_date) {
-      const selectedDate = normalizeDateInput(selected_date);
-
-      if (!selectedDate) {
-        return res.status(400).json({
-          success: false,
-          message: 'selected_date không hợp lệ. Vui lòng sử dụng YYYY-MM-DD.'
-        });
-      }
-
-      datesToFetch.push(selectedDate);
-    } else {
-      datesToFetch.push(getTodayDateString());
+    if (resolvedDates.error) {
+      return res.status(400).json({
+        success: false,
+        message: resolvedDates.error,
+      });
     }
+
+    const { contextMode, datesToFetch } = resolvedDates;
 
     // 2. Gom context lịch của các ngày này
     const calendarContext = [];
@@ -70,8 +165,15 @@ async function chat(req, res, next) {
 
         calendarContext.push({
           date: detail.solar_date,
+          date_intro: buildDateIntro(detail),
+          lunar_display: buildLunarDisplay(detail),
           weekday: detail.weekday,
           lunar_date: detail.lunar_date,
+          lunar: {
+            day: detail.lunar.day,
+            month: detail.lunar.month,
+            year: detail.lunar.year,
+          },
           can_chi: detail.can_chi_day,
           can_chi_detail: {
             day: detail.can_chi_day,
@@ -103,13 +205,18 @@ async function chat(req, res, next) {
     }
 
     // 3. Gọi AI Advisor Service
-    const aiResponse = await aiAdvisorService.askAdvisor(message, calendarContext);
+    const aiResponse = await aiAdvisorService.askAdvisor(
+      message,
+      calendarContext,
+      conversationHistory,
+      { contextMode },
+    );
 
     // 4. Lưu hội thoại vào Database (Transaction)
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    let activeConversationId = conversation_id;
+    let activeConversationId = activeConversationIdFromRequest;
 
     if (!activeConversationId) {
       const title = message.length > 50 ? `${message.slice(0, 47)}...` : message;
@@ -118,20 +225,6 @@ async function chat(req, res, next) {
         [userId, title]
       );
       activeConversationId = newConversation.insertId;
-    } else {
-      // Kiểm tra cuộc hội thoại có thuộc về user hiện tại không
-      const [convCheck] = await conn.execute(
-        'SELECT id FROM chat_conversations WHERE id = ? AND user_id = ? LIMIT 1',
-        [activeConversationId, userId]
-      );
-      if (convCheck.length === 0) {
-        await conn.rollback();
-        conn.release();
-        return res.status(403).json({
-          success: false,
-          message: 'Không có quyền truy cập cuộc hội thoại này.'
-        });
-      }
     }
 
     // Lưu tin nhắn của User
@@ -146,6 +239,9 @@ async function chat(req, res, next) {
       recommended_actions: aiResponse.recommended_actions || [],
       cautions: aiResponse.cautions || [],
       suggested_dates: aiResponse.suggested_dates || [],
+      referenced_dates: aiResponse.referenced_dates || [],
+      date_intro: aiResponse.date_intro || '',
+      context_mode: contextMode,
       disclaimer: aiResponse.disclaimer,
       context_dates: datesToFetch,
     });
