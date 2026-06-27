@@ -66,15 +66,32 @@ async function chat(req, res, next) {
     for (const dateStr of datesToFetch) {
       try {
         const detail = await calendarService.getDayDetail(dateStr, userId);
+        const dayAdvice = detail.day_advice || {};
+
         calendarContext.push({
           date: detail.solar_date,
           weekday: detail.weekday,
           lunar_date: detail.lunar_date,
           can_chi: detail.can_chi_day,
+          can_chi_detail: {
+            day: detail.can_chi_day,
+            month: detail.can_chi_month,
+            year: detail.can_chi_year,
+          },
           holidays: detail.holidays,
           user_events: detail.events,
-          day_rating: detail.day_advice.day_rating,
-          day_summary: detail.day_advice.summary
+          day_advice: {
+            source: 'calendarService.getDayDetail / dayAdviceService / lunarText',
+            rating: dayAdvice.day_rating || 'neutral',
+            summary: dayAdvice.summary || 'Thông tin đánh giá ngày chưa sẵn sàng.',
+            good_for: dayAdvice.good_for || [],
+            avoid_for: dayAdvice.avoid_for || [],
+          },
+          // Legacy fields kept so older prompts/tests still receive the same shape.
+          day_rating: dayAdvice.day_rating || 'neutral',
+          day_summary: dayAdvice.summary || 'Thông tin đánh giá ngày chưa sẵn sàng.',
+          good_for: dayAdvice.good_for || [],
+          avoid_for: dayAdvice.avoid_for || [],
         });
       } catch (err) {
         console.error(`[AIAdvisorController] Lỗi gom context ngày ${dateStr}:`, err);

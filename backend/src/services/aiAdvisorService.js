@@ -128,7 +128,7 @@ async function askAdvisor(message, calendarContext, conversationHistory = []) {
         },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.7,
+      temperature: 0.3,
     });
 
     const content = response.choices?.[0]?.message?.content;
@@ -186,6 +186,24 @@ Nhiệm vụ của bạn là hỗ trợ người dùng:
 
 Bạn chỉ được sử dụng dữ liệu calendar_context do hệ thống cung cấp. Tuyệt đối không tự tạo ra ngày âm, ngày lễ, can chi hoặc sự kiện cá nhân không có trong dữ liệu context.
 
+Dữ liệu calendar_context được lấy từ calendarService.getDayDetail. Trường day_advice là nguồn đánh giá ngày chính thức của ứng dụng, được tạo từ rule-based dayAdviceService dựa trên dữ liệu âm lịch và bản dịch trong lunarText.js, gồm Hoàng/Hắc đạo, thần ngày, trực ngày, việc nên làm và việc nên tránh. Khi trả lời về ngày tốt/xấu hoặc mức độ phù hợp, phải ưu tiên các trường sau:
+- day_advice.rating hoặc day_rating: đánh giá tổng quan của ngày.
+- day_advice.summary hoặc day_summary: lý do chính đang hiển thị ở Homepage.
+- day_advice.good_for hoặc good_for: các việc phù hợp theo dữ liệu lunarText.
+- day_advice.avoid_for hoặc avoid_for: các việc nên thận trọng theo dữ liệu lunarText.
+- holidays và user_events: ngày lễ và lịch cá nhân có thể ảnh hưởng đến lời khuyên thực tế.
+
+Quy tắc dùng day_advice:
+1. Không được đảo ngược đánh giá ngày. Nếu day_advice.rating là "caution", không được kết luận ngày rất tốt; nếu là "favorable", vẫn chỉ nói là tương đối thuận lợi và có điều kiện chuẩn bị kỹ.
+2. Với câu hỏi về một hoạt động cụ thể, hãy so khớp ý nghĩa hoạt động đó với good_for và avoid_for:
+   - Nếu hoạt động khớp avoid_for, rating phản hồi nên là "caution" hoặc ít nhất nêu rõ cần tránh/thận trọng.
+   - Nếu hoạt động khớp good_for và ngày không phải "caution", có thể rating là "favorable".
+   - Nếu không khớp rõ, giữ đánh giá gần với day_advice.rating và giải thích là dữ liệu không chỉ ra trực tiếp hoạt động đó.
+3. Với câu hỏi "nên ưu tiên việc gì", recommended_actions phải dựa trên good_for, summary, user_events và các bước chuẩn bị thực tế.
+4. Với cautions, phải ưu tiên avoid_for, các xung đột lịch cá nhân và các lưu ý trong summary.
+5. Với suggested_dates, chỉ đề xuất các ngày có trong calendar_context. Lý do của từng ngày phải lấy từ day_advice.summary/good_for/avoid_for của chính ngày đó.
+6. Nếu thiếu day_advice hoặc context không đủ, nói rõ là dữ liệu đánh giá ngày chưa đủ, không tự suy diễn thêm từ can chi.
+
 Nguyên tắc trả lời bắt buộc:
 1. Mọi đánh giá đều mang tính tham khảo, không khẳng định kết quả chắc chắn trong tương lai.
 2. Không cam kết tài lộc, sức khỏe, vận mệnh hay thành công tuyệt đối.
@@ -194,7 +212,7 @@ Nguyên tắc trả lời bắt buộc:
 5. Câu trả lời phải ngắn gọn, dễ hiểu và viết bằng tiếng Việt.
 6. Trả về đúng JSON:
 {
-  "intent": "tomorrow_advice" | "find_suitable_date" | "date_suitability" | "personal_schedule_advice",
+  "intent": "tomorrow_advice" | "find_suitable_date" | "date_suitability" | "personal_schedule_advice" | "fallback",
   "answer": "Câu trả lời trực tiếp và đầy đủ cho người dùng",
   "rating": "favorable" | "neutral" | "caution",
   "recommended_actions": ["Việc nên làm 1", "Việc nên làm 2"],

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL, apiRequest } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
@@ -155,75 +155,199 @@ function EventForm({
   );
 }
 
+function AdvisorReplyContent({ reply }) {
+  return (
+    <div className="advisor-reply">
+      <div className="advisor-reply__header">
+        <strong>{reply.rating || 'neutral'}</strong>
+        <span>{reply.disclaimer}</span>
+      </div>
+
+      <p>{reply.answer}</p>
+
+      {reply.recommended_actions?.length > 0 ? (
+        <div className="advisor-reply__section">
+          <h4>Nên ưu tiên</h4>
+          <ul>
+            {reply.recommended_actions.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {reply.cautions?.length > 0 ? (
+        <div className="advisor-reply__section">
+          <h4>Cần lưu ý</h4>
+          <ul>
+            {reply.cautions.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AdvisorMessage({ message }) {
+  const isUser = message.role === 'user';
+
+  return (
+    <article className={`advisor-message advisor-message--${message.role}`}>
+      <div className="advisor-message__meta">
+        <span>{isUser ? 'Bạn' : 'AI advisor'}</span>
+        <time dateTime={message.date}>{formatShortDate(message.date)}</time>
+      </div>
+
+      <div className="advisor-message__bubble">
+        {isUser ? (
+          <p>{message.content}</p>
+        ) : (
+          <AdvisorReplyContent reply={message.reply} />
+        )}
+      </div>
+    </article>
+  );
+}
+
+function AdvisorTypingMessage({ advisorDate }) {
+  return (
+    <article className="advisor-message advisor-message--assistant">
+      <div className="advisor-message__meta">
+        <span>AI advisor</span>
+        <time dateTime={advisorDate}>{formatShortDate(advisorDate)}</time>
+      </div>
+
+      <div className="advisor-message__bubble advisor-message__bubble--typing">
+        <span className="advisor-typing-dot" />
+        <span className="advisor-typing-dot" />
+        <span className="advisor-typing-dot" />
+      </div>
+    </article>
+  );
+}
+
 function AdvisorPanel({
-  selectedDate,
+  advisorDate,
   advisorForm,
-  advisorReply,
+  advisorMessages,
   advisorError,
   advisorLoading,
+  isOpen,
+  onOpen,
+  onClose,
+  onDateChange,
   onChange,
   onSubmit,
 }) {
+  const chatLogRef = useRef(null);
+
+  useEffect(() => {
+    if (!isOpen || !chatLogRef.current) {
+      return;
+    }
+
+    chatLogRef.current.scrollTo({
+      top: chatLogRef.current.scrollHeight,
+      behavior: 'smooth',
+    });
+  }, [advisorLoading, advisorMessages, isOpen]);
+
   return (
-    <section className="calendar-side-card">
-      <div className="calendar-section-header">
-        <div>
-          <p className="calendar-section-label">AI advisor</p>
-          <h3>Hỏi nhanh theo ngày</h3>
-        </div>
-        <span className="calendar-chip">{formatShortDate(selectedDate)}</span>
-      </div>
+    <>
+      <button
+        className={`advisor-floating-button${isOpen ? ' is-open' : ''}`}
+        type="button"
+        onClick={isOpen ? onClose : onOpen}
+        aria-controls="advisor-chatbot-popup"
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        aria-label={isOpen ? 'Đóng chatbot AI' : 'Mở chatbot AI'}
+      >
+        <span className="advisor-floating-button__mark" aria-hidden="true">AI</span>
+        <span>Tư vấn AI</span>
+      </button>
 
-      <form className="calendar-advisor-form" onSubmit={onSubmit}>
-        <textarea
-          rows="4"
-          value={advisorForm}
-          onChange={onChange}
-          placeholder="Ví dụ: Ngày này tôi nên ưu tiên việc gì? Có phù hợp để ký hợp đồng không?"
-        />
+      {isOpen ? (
+        <section
+          className="advisor-popup"
+          id="advisor-chatbot-popup"
+          role="dialog"
+          aria-label="Chatbot tư vấn AI"
+        >
+          <div className="advisor-popup__header">
+            <div>
+              <p className="calendar-section-label">AI advisor</p>
+              <h3>Hỏi nhanh theo ngày</h3>
+            </div>
 
-        {advisorError ? (
-          <p className="form-error" role="alert">{advisorError}</p>
-        ) : null}
-
-        <button className="primary-button" type="submit" disabled={advisorLoading}>
-          {advisorLoading ? 'Đang hỏi AI...' : 'Gửi câu hỏi'}
-        </button>
-      </form>
-
-      {advisorReply ? (
-        <div className="calendar-advisor-answer">
-          <div className="calendar-advisor-answer__header">
-            <strong>{advisorReply.rating || 'neutral'}</strong>
-            <span>{advisorReply.disclaimer}</span>
+            <button
+              className="advisor-popup__close"
+              type="button"
+              onClick={onClose}
+              aria-label="Đóng chatbot AI"
+            >
+              ×
+            </button>
           </div>
 
-          <p>{advisorReply.answer}</p>
-
-          {advisorReply.recommended_actions?.length > 0 ? (
-            <div>
-              <h4>Nên ưu tiên</h4>
-              <ul>
-                {advisorReply.recommended_actions.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
+          <div className="advisor-popup__body">
+            <div className="advisor-popup__context">
+              <label className="advisor-date-field">
+                <span>Ngày tư vấn</span>
+                <div className="advisor-date-field__row">
+                  <input
+                    type="date"
+                    value={advisorDate}
+                    disabled={advisorLoading}
+                    onChange={(event) => onDateChange(event.target.value)}
+                  />
+                  <strong>{formatShortDate(advisorDate)}</strong>
+                </div>
+              </label>
             </div>
-          ) : null}
 
-          {advisorReply.cautions?.length > 0 ? (
-            <div>
-              <h4>Cần lưu ý</h4>
-              <ul>
-                {advisorReply.cautions.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
+            <div
+              className="advisor-chat-log"
+              ref={chatLogRef}
+              role="log"
+              aria-label="Cuộc trò chuyện với AI advisor"
+              aria-live="polite"
+            >
+              {advisorMessages.length > 0 ? (
+                advisorMessages.map((message) => (
+                  <AdvisorMessage key={message.id} message={message} />
+                ))
+              ) : (
+                <div className="advisor-chat-empty">Chưa có tin nhắn.</div>
+              )}
+
+              {advisorLoading ? (
+                <AdvisorTypingMessage advisorDate={advisorDate} />
+              ) : null}
             </div>
-          ) : null}
-        </div>
+
+            <form className="calendar-advisor-form advisor-popup__form" onSubmit={onSubmit}>
+              <textarea
+                rows="3"
+                value={advisorForm}
+                onChange={onChange}
+                placeholder="Ví dụ: Ngày này tôi nên ưu tiên việc gì? Có phù hợp để ký hợp đồng không?"
+              />
+
+              {advisorError ? (
+                <p className="form-error" role="alert">{advisorError}</p>
+              ) : null}
+
+              <button className="primary-button" type="submit" disabled={advisorLoading}>
+                {advisorLoading ? 'Đang hỏi AI...' : 'Gửi câu hỏi'}
+              </button>
+            </form>
+          </div>
+        </section>
       ) : null}
-    </section>
+    </>
   );
 }
 
@@ -294,10 +418,12 @@ function HomePage() {
   const [savingEvent, setSavingEvent] = useState(false);
 
   const [advisorForm, setAdvisorForm] = useState('');
-  const [advisorReply, setAdvisorReply] = useState(null);
+  const [advisorDate, setAdvisorDate] = useState(today);
+  const [advisorMessages, setAdvisorMessages] = useState([]);
   const [advisorConversationId, setAdvisorConversationId] = useState(null);
   const [advisorLoading, setAdvisorLoading] = useState(false);
   const [advisorError, setAdvisorError] = useState('');
+  const [isAdvisorOpen, setIsAdvisorOpen] = useState(false);
 
   const { year: displayedYear, month: displayedMonth } = useMemo(
     () => parseMonthKey(monthKey),
@@ -381,6 +507,28 @@ function HomePage() {
     setEventError('');
   }, [editingEventId, selectedDate]);
 
+  useEffect(() => {
+    setAdvisorDate(selectedDate);
+  }, [selectedDate]);
+
+  useEffect(() => {
+    if (!isAdvisorOpen) {
+      return undefined;
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        setIsAdvisorOpen(false);
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isAdvisorOpen]);
+
   async function handleLogout() {
     setIsLoggingOut(true);
 
@@ -396,7 +544,6 @@ function HomePage() {
     setSelectedDate(dateStr);
     setMonthKey(getMonthKey(dateStr));
     setEditingEventId(null);
-    setAdvisorReply(null);
     setAdvisorError('');
   }
 
@@ -531,8 +678,25 @@ function HomePage() {
 
   async function handleAdvisorSubmit(event) {
     event.preventDefault();
+    const message = advisorForm.trim();
+    const requestDate = advisorDate;
+
+    if (!message) {
+      setAdvisorError('Vui lòng nhập câu hỏi trước khi gửi.');
+      return;
+    }
+
     setAdvisorLoading(true);
     setAdvisorError('');
+    setAdvisorMessages((current) => [
+      ...current,
+      {
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content: message,
+        date: requestDate,
+      },
+    ]);
 
     try {
       const response = await apiRequest('/api/advisor/chat', {
@@ -540,13 +704,21 @@ function HomePage() {
         token,
         body: {
           conversation_id: advisorConversationId,
-          message: advisorForm,
-          selected_date: selectedDate,
+          message,
+          selected_date: requestDate,
         },
       });
 
       setAdvisorConversationId(response.data.conversation_id);
-      setAdvisorReply(response.data);
+      setAdvisorMessages((current) => [
+        ...current,
+        {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          reply: response.data,
+          date: requestDate,
+        },
+      ]);
       setAdvisorForm('');
     } catch (error) {
       setAdvisorError(error.message || 'Không gửi được câu hỏi AI.');
@@ -778,11 +950,15 @@ function HomePage() {
             </section>
 
             <AdvisorPanel
-              selectedDate={selectedDate}
+              advisorDate={advisorDate}
               advisorForm={advisorForm}
-              advisorReply={advisorReply}
+              advisorMessages={advisorMessages}
               advisorError={advisorError}
               advisorLoading={advisorLoading}
+              isOpen={isAdvisorOpen}
+              onOpen={() => setIsAdvisorOpen(true)}
+              onClose={() => setIsAdvisorOpen(false)}
+              onDateChange={setAdvisorDate}
               onChange={(event) => setAdvisorForm(event.target.value)}
               onSubmit={handleAdvisorSubmit}
             />
