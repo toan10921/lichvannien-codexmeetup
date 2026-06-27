@@ -22,7 +22,7 @@ async function run() {
   await pool.execute('DELETE FROM day_advice_cache WHERE solar_date = ?', [testDate]);
   console.log(`Đã làm sạch cache cũ cho ngày ${testDate}`);
 
-  // Lần gọi 1: Chưa có cache (sẽ gọi AI hoặc lấy fallback nếu sai key)
+  // Lần gọi 1: Chưa có cache (sẽ tính theo rule engine rồi ghi cache)
   console.log('\n--- Lần gọi thứ nhất (Chưa có cache) ---');
   const start1 = Date.now();
   const advice1 = await dayAdviceService.getOrGenerateDayAdvice(testDate, '15/6 âm lịch', 'Giáp Tý');
@@ -49,7 +49,7 @@ async function run() {
 
   if (isCachedInDB && existsInDB) {
     console.log('\n[PASS] Cơ chế cache hoạt động HOÀN HẢO!');
-    console.log(`  - Lần 1 (Gọi AI/Fallback): ${duration1}ms`);
+    console.log(`  - Lần 1 (Tính rule + ghi cache): ${duration1}ms`);
     console.log(`  - Lần 2 (Đọc cache DB): ${duration2}ms (Giảm ${((duration1 - duration2)/duration1 * 100).toFixed(1)}% thời gian)`);
     console.log(`  - Đã tìm thấy bản ghi cache trong DB (ID: ${rows[0].id}, Đánh giá: ${rows[0].day_rating})`);
   } else {
