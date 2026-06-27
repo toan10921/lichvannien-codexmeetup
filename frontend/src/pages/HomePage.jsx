@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API_URL, apiRequest } from '../api/client';
+import { API_URL, advisorApi, apiRequest, planningApi } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import {
   addDaysToDate,
@@ -29,6 +29,22 @@ function createDefaultEventForm(selectedDate) {
     start_at: selectedDate,
     end_at: selectedDate,
     is_all_day: true,
+  };
+}
+
+function createDefaultPlanningForm(selectedDate) {
+  return {
+    title: '',
+    description: '',
+    category: '',
+    priority: 'medium',
+    duration_minutes: '60',
+    earliest_date: selectedDate,
+    latest_date: addDaysToDate(selectedDate, 14),
+    preferred_time_of_day: 'any',
+    avoid_weekends: false,
+    prefer_good_day: true,
+    is_all_day: false,
   };
 }
 
@@ -63,6 +79,22 @@ function buildEventPayload(form) {
   return payload;
 }
 
+function buildPlanningPayload(form) {
+  return {
+    title: form.title.trim(),
+    description: form.description.trim(),
+    category: form.category.trim(),
+    priority: form.priority,
+    duration_minutes: Number(form.duration_minutes || 60),
+    earliest_date: form.earliest_date,
+    latest_date: form.latest_date,
+    preferred_time_of_day: form.preferred_time_of_day,
+    avoid_weekends: Boolean(form.avoid_weekends),
+    prefer_good_day: Boolean(form.prefer_good_day),
+    is_all_day: Boolean(form.is_all_day),
+  };
+}
+
 function getDayQualityClass(dayQuality) {
   if (!dayQuality?.key) {
     return 'calendar-status-badge';
@@ -71,94 +103,488 @@ function getDayQualityClass(dayQuality) {
   return `calendar-status-badge calendar-status-badge--${dayQuality.key}`;
 }
 
-function EventForm({
-  form,
+function getPlannerModeLabel(mode) {
+  return mode === 'fixed' ? 'Lịch cố định' : 'Nhờ AI gợi ý';
+}
+
+function getPriorityLabel(priority) {
+  switch (priority) {
+    case 'high':
+      return 'Ưu tiên cao';
+    case 'low':
+      return 'Ưu tiên thấp';
+    default:
+      return 'Ưu tiên vừa';
+  }
+}
+
+function getTimeOfDayLabel(value) {
+  switch (value) {
+    case 'morning':
+      return 'Buổi sáng';
+    case 'afternoon':
+      return 'Buổi chiều';
+    case 'evening':
+      return 'Buổi tối';
+    default:
+      return 'Khung giờ linh hoạt';
+  }
+}
+
+function getTimelineStatusLabel(status) {
+  switch (status) {
+    case 'suggested':
+      return 'Đã có gợi ý';
+    case 'scheduled':
+      return 'Đã chốt lịch';
+    default:
+      return 'Đang chờ gợi ý';
+  }
+}
+
+function formatPlanningRange(item) {
+  return `${formatShortDate(item.earliest_date)} - ${formatShortDate(item.latest_date)}`;
+}
+
+function buildPlannerActionKey(action, itemId) {
+  return `${action}:${itemId}`;
+}
+
+function isPlannerActionRunning(plannerActionKey, action, itemId) {
+  return plannerActionKey === buildPlannerActionKey(action, itemId);
+}
+
+function PlannerComposer({
+  mode,
+  onModeChange,
+  eventForm,
   editingEventId,
   eventError,
   savingEvent,
-  onChange,
+  onEventChange,
   onToggleAllDay,
-  onSubmit,
+  onEventSubmit,
   onCancelEdit,
+  planningForm,
+  planningFormError,
+  savingPlanning,
+  onPlanningChange,
+  onPlanningSubmit,
+  onPlanningReset,
+}) {
+  const fixedLabel = editingEventId ? 'Cập nhật sự kiện cố định' : 'Tạo sự kiện cố định';
+
+  return (
+    <section className="calendar-side-card">
+      <div className="calendar-section-header">
+        <div>
+          <p className="calendar-section-label">Planner</p>
+          <h3>{getPlannerModeLabel(mode)}</h3>
+        </div>
+        <span className="calendar-chip">2 chế độ</span>
+      </div>
+
+      <div className="planner-mode-switch" role="tablist" aria-label="Chọn chế độ lập lịch">
+        <button
+          type="button"
+          className={`planner-mode-switch__item${mode === 'flexible' ? ' is-active' : ''}`}
+          onClick={() => onModeChange('flexible')}
+        >
+          Nhờ AI gợi ý
+        </button>
+        <button
+          type="button"
+          className={`planner-mode-switch__item${mode === 'fixed' ? ' is-active' : ''}`}
+          onClick={() => onModeChange('fixed')}
+        >
+          Lịch cố định
+        </button>
+      </div>
+
+      {mode === 'fixed' ? (
+        <form className="calendar-event-form" onSubmit={onEventSubmit}>
+          <p className="planner-helper-text">
+            {fixedLabel}. Mục này tạo lịch thật ngay trên calendar của bạn.
+          </p>
+
+          <label>
+            Tiêu đề
+            <input
+              name="title"
+              value={eventForm.title}
+              onChange={onEventChange}
+              placeholder="Họp khách hàng"
+            />
+          </label>
+
+          <label>
+            Mô tả
+            <textarea
+              name="description"
+              rows="3"
+              value={eventForm.description}
+              onChange={onEventChange}
+              placeholder="Chuẩn bị demo, báo giá, checklist..."
+            />
+          </label>
+
+          <label className="calendar-checkbox-field">
+            <input
+              type="checkbox"
+              checked={eventForm.is_all_day}
+              onChange={onToggleAllDay}
+            />
+            <span>Sự kiện cả ngày</span>
+          </label>
+
+          <div className="calendar-field-grid">
+            <label>
+              {eventForm.is_all_day ? 'Ngày bắt đầu' : 'Bắt đầu lúc'}
+              <input
+                name="start_at"
+                type={eventForm.is_all_day ? 'date' : 'datetime-local'}
+                value={eventForm.start_at}
+                onChange={onEventChange}
+              />
+            </label>
+
+            <label>
+              {eventForm.is_all_day ? 'Ngày kết thúc' : 'Kết thúc lúc'}
+              <input
+                name="end_at"
+                type={eventForm.is_all_day ? 'date' : 'datetime-local'}
+                value={eventForm.end_at}
+                onChange={onEventChange}
+              />
+            </label>
+          </div>
+
+          {eventError ? (
+            <p className="form-error" role="alert">{eventError}</p>
+          ) : null}
+
+          <div className="calendar-form-actions">
+            <button className="primary-button" type="submit" disabled={savingEvent}>
+              {savingEvent ? 'Đang lưu...' : editingEventId ? 'Lưu thay đổi' : 'Tạo lịch cố định'}
+            </button>
+
+            {editingEventId ? (
+              <button type="button" className="secondary-button" onClick={onCancelEdit}>
+                Hủy sửa
+              </button>
+            ) : null}
+          </div>
+        </form>
+      ) : (
+        <form className="calendar-event-form" onSubmit={onPlanningSubmit}>
+          <p className="planner-helper-text">
+            Tạo việc chưa có lịch cố định, hệ thống sẽ gợi ý tối đa 5 slot phù hợp để bạn chốt.
+          </p>
+
+          <label>
+            Tên việc cần lên lịch
+            <input
+              name="title"
+              value={planningForm.title}
+              onChange={onPlanningChange}
+              placeholder="Họp kickoff dự án"
+            />
+          </label>
+
+          <label>
+            Mô tả / ghi chú
+            <textarea
+              name="description"
+              rows="3"
+              value={planningForm.description}
+              onChange={onPlanningChange}
+              placeholder="Cần ưu tiên ngày đẹp, tránh trùng lịch sales..."
+            />
+          </label>
+
+          <div className="calendar-field-grid">
+            <label>
+              Nhóm việc
+              <input
+                name="category"
+                value={planningForm.category}
+                onChange={onPlanningChange}
+                placeholder="Công việc / cá nhân / gặp gỡ"
+              />
+            </label>
+
+            <label>
+              Mức ưu tiên
+              <select
+                name="priority"
+                value={planningForm.priority}
+                onChange={onPlanningChange}
+              >
+                <option value="low">Ưu tiên thấp</option>
+                <option value="medium">Ưu tiên vừa</option>
+                <option value="high">Ưu tiên cao</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="calendar-field-grid">
+            <label>
+              Tìm trong khoảng từ ngày
+              <input
+                name="earliest_date"
+                type="date"
+                value={planningForm.earliest_date}
+                onChange={onPlanningChange}
+              />
+            </label>
+
+            <label>
+              Đến ngày
+              <input
+                name="latest_date"
+                type="date"
+                value={planningForm.latest_date}
+                onChange={onPlanningChange}
+              />
+            </label>
+          </div>
+
+          <div className="calendar-field-grid">
+            <label>
+              Khung giờ ưu tiên
+              <select
+                name="preferred_time_of_day"
+                value={planningForm.preferred_time_of_day}
+                onChange={onPlanningChange}
+              >
+                <option value="any">Linh hoạt</option>
+                <option value="morning">Buổi sáng</option>
+                <option value="afternoon">Buổi chiều</option>
+                <option value="evening">Buổi tối</option>
+              </select>
+            </label>
+
+            <label>
+              Thời lượng dự kiến (phút)
+              <input
+                name="duration_minutes"
+                type="number"
+                min="30"
+                max="720"
+                step="30"
+                disabled={planningForm.is_all_day}
+                value={planningForm.duration_minutes}
+                onChange={onPlanningChange}
+              />
+            </label>
+          </div>
+
+          <div className="planner-checkbox-group">
+            <label className="calendar-checkbox-field">
+              <input
+                type="checkbox"
+                name="prefer_good_day"
+                checked={planningForm.prefer_good_day}
+                onChange={onPlanningChange}
+              />
+              <span>Ưu tiên ngày tốt / hoàng đạo</span>
+            </label>
+
+            <label className="calendar-checkbox-field">
+              <input
+                type="checkbox"
+                name="avoid_weekends"
+                checked={planningForm.avoid_weekends}
+                onChange={onPlanningChange}
+              />
+              <span>Tránh cuối tuần</span>
+            </label>
+
+            <label className="calendar-checkbox-field">
+              <input
+                type="checkbox"
+                name="is_all_day"
+                checked={planningForm.is_all_day}
+                onChange={onPlanningChange}
+              />
+              <span>Việc cả ngày, không cần khung giờ cụ thể</span>
+            </label>
+          </div>
+
+          {planningFormError ? (
+            <p className="form-error" role="alert">{planningFormError}</p>
+          ) : null}
+
+          <div className="calendar-form-actions">
+            <button className="primary-button" type="submit" disabled={savingPlanning}>
+              {savingPlanning ? 'Đang tạo gợi ý...' : 'Tạo việc và gợi ý lịch'}
+            </button>
+            <button type="button" className="secondary-button" onClick={onPlanningReset}>
+              Xóa form
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
+  );
+}
+
+function PlannerTimeline({
+  timeline,
+  loading,
+  timelineError,
+  plannerActionKey,
+  onOpenFixedEvent,
+  onSuggestItem,
+  onConfirmSuggestion,
+  onDeleteItem,
 }) {
   return (
     <section className="calendar-side-card">
       <div className="calendar-section-header">
         <div>
-          <p className="calendar-section-label">Sự kiện</p>
-          <h3>{editingEventId ? 'Cập nhật sự kiện' : 'Thêm sự kiện mới'}</h3>
+          <p className="calendar-section-label">Planner timeline</p>
+          <h3>Lịch sắp tới & việc chờ chốt</h3>
         </div>
+        <span className="calendar-chip">{timeline.length} mục</span>
       </div>
 
-      <form className="calendar-event-form" onSubmit={onSubmit}>
-        <label>
-          Tiêu đề
-          <input
-            name="title"
-            value={form.title}
-            onChange={onChange}
-            placeholder="Họp khách hàng"
-          />
-        </label>
+      {timelineError ? <p className="form-error">{timelineError}</p> : null}
 
-        <label>
-          Mô tả
-          <textarea
-            name="description"
-            rows="3"
-            value={form.description}
-            onChange={onChange}
-            placeholder="Chuẩn bị demo, báo giá, checklist..."
-          />
-        </label>
+      {loading ? (
+        <div className="calendar-loading-state">Đang tải planner...</div>
+      ) : timeline.length > 0 ? (
+        <div className="planner-timeline-list">
+          {timeline.map((item) => {
+            if (item.kind === 'fixed') {
+              return (
+                <article key={`fixed-${item.id}`} className="planner-timeline-item planner-timeline-item--fixed">
+                  <div className="planner-timeline-item__top">
+                    <span className="planner-pill planner-pill--fixed">Lịch thật</span>
+                    <span className="planner-status">{getTimelineStatusLabel(item.status)}</span>
+                  </div>
 
-        <label className="calendar-checkbox-field">
-          <input
-            type="checkbox"
-            checked={form.is_all_day}
-            onChange={onToggleAllDay}
-          />
-          <span>Sự kiện cả ngày</span>
-        </label>
+                  <h4>{item.title}</h4>
+                  <p>{item.description || 'Sự kiện đã được chốt trên calendar cá nhân.'}</p>
 
-        <div className="calendar-field-grid">
-          <label>
-            {form.is_all_day ? 'Ngày bắt đầu' : 'Bắt đầu lúc'}
-            <input
-              name="start_at"
-              type={form.is_all_day ? 'date' : 'datetime-local'}
-              value={form.start_at}
-              onChange={onChange}
-            />
-          </label>
+                  <div className="planner-meta-row">
+                    <span>{formatTimeRange(item.start_at, item.end_at, item.is_all_day)}</span>
+                    <span>{formatShortDate(item.start_at.slice(0, 10))}</span>
+                  </div>
 
-          <label>
-            {form.is_all_day ? 'Ngày kết thúc' : 'Kết thúc lúc'}
-            <input
-              name="end_at"
-              type={form.is_all_day ? 'date' : 'datetime-local'}
-              value={form.end_at}
-              onChange={onChange}
-            />
-          </label>
+                  <div className="planner-card-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => onOpenFixedEvent(item.start_at.slice(0, 10))}
+                    >
+                      Mở ngày này
+                    </button>
+                  </div>
+                </article>
+              );
+            }
+
+            return (
+              <article key={`flexible-${item.id}`} className="planner-timeline-item">
+                <div className="planner-timeline-item__top">
+                  <span className="planner-pill planner-pill--flexible">Chờ chốt lịch</span>
+                  <span className={`planner-status planner-status--${item.status}`}>
+                    {getTimelineStatusLabel(item.status)}
+                  </span>
+                </div>
+
+                <h4>{item.title}</h4>
+                <p>{item.description || 'Chưa có mô tả thêm cho việc này.'}</p>
+
+                <div className="planner-meta-row">
+                  <span>{formatPlanningRange(item)}</span>
+                  <span>{getPriorityLabel(item.priority)}</span>
+                </div>
+
+                <div className="planner-meta-row">
+                  <span>{item.is_all_day ? 'Cả ngày' : `${item.duration_minutes} phút`}</span>
+                  <span>{getTimeOfDayLabel(item.preferred_time_of_day)}</span>
+                </div>
+
+                {item.category ? (
+                  <div className="planner-meta-row">
+                    <span>Nhóm: {item.category}</span>
+                  </div>
+                ) : null}
+
+                {item.suggestions?.length > 0 ? (
+                  <div className="planner-suggestion-list">
+                    {item.suggestions.map((suggestion) => {
+                      const isConfirming = isPlannerActionRunning(
+                        plannerActionKey,
+                        'confirm',
+                        `${item.id}-${suggestion.rank}`,
+                      );
+
+                      return (
+                        <div
+                          key={`${item.id}-${suggestion.rank}-${suggestion.start_at}`}
+                          className="planner-suggestion-item"
+                        >
+                          <div className="planner-suggestion-item__content">
+                            <strong>
+                              Gợi ý #{suggestion.rank}: {formatShortDate(suggestion.date)}
+                            </strong>
+                            <span>{formatTimeRange(suggestion.start_at, suggestion.end_at, suggestion.is_all_day)}</span>
+                            <em>
+                              {suggestion.day_quality_label || suggestion.day_rating}
+                              {suggestion.display_label ? ` · ${suggestion.display_label}` : ''}
+                            </em>
+                            <p>{suggestion.reason}</p>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            disabled={isConfirming || Boolean(plannerActionKey)}
+                            onClick={() => onConfirmSuggestion(item.id, suggestion)}
+                          >
+                            {isConfirming ? 'Đang chốt...' : 'Chốt lịch'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="calendar-empty-state planner-inline-empty">
+                    Chưa có gợi ý nào cho việc này.
+                  </div>
+                )}
+
+                <div className="planner-card-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={isPlannerActionRunning(plannerActionKey, 'suggest', item.id) || Boolean(plannerActionKey)}
+                    onClick={() => onSuggestItem(item.id)}
+                  >
+                    {isPlannerActionRunning(plannerActionKey, 'suggest', item.id) ? 'Đang gợi ý...' : 'Gợi ý lại'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={isPlannerActionRunning(plannerActionKey, 'delete', item.id) || Boolean(plannerActionKey)}
+                    onClick={() => onDeleteItem(item.id)}
+                  >
+                    {isPlannerActionRunning(plannerActionKey, 'delete', item.id) ? 'Đang xóa...' : 'Xóa việc'}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
         </div>
-
-        {eventError ? (
-          <p className="form-error" role="alert">{eventError}</p>
-        ) : null}
-
-        <div className="calendar-form-actions">
-          <button className="primary-button" type="submit" disabled={savingEvent}>
-            {savingEvent ? 'Đang lưu...' : editingEventId ? 'Lưu thay đổi' : 'Thêm sự kiện'}
-          </button>
-
-          {editingEventId ? (
-            <button type="button" className="secondary-button" onClick={onCancelEdit}>
-              Hủy sửa
-            </button>
-          ) : null}
+      ) : (
+        <div className="calendar-empty-state">
+          Chưa có việc nào trong planner. Hãy tạo một việc linh hoạt để nhận gợi ý lịch.
         </div>
-      </form>
+      )}
     </section>
   );
 }
@@ -455,17 +881,25 @@ function HomePage() {
   const [selectedDate, setSelectedDate] = useState(today);
   const [monthKey, setMonthKey] = useState(getMonthKey(today));
   const [monthData, setMonthData] = useState(null);
-  const [monthEvents, setMonthEvents] = useState([]);
   const [dayDetail, setDayDetail] = useState(null);
 
   const [loadingMonth, setLoadingMonth] = useState(false);
   const [loadingDay, setLoadingDay] = useState(false);
   const [appError, setAppError] = useState('');
 
+  const [plannerMode, setPlannerMode] = useState('flexible');
   const [eventForm, setEventForm] = useState(createDefaultEventForm(today));
   const [editingEventId, setEditingEventId] = useState(null);
   const [eventError, setEventError] = useState('');
   const [savingEvent, setSavingEvent] = useState(false);
+
+  const [planningForm, setPlanningForm] = useState(createDefaultPlanningForm(today));
+  const [planningTimeline, setPlanningTimeline] = useState([]);
+  const [planningFormError, setPlanningFormError] = useState('');
+  const [planningTimelineError, setPlanningTimelineError] = useState('');
+  const [savingPlanning, setSavingPlanning] = useState(false);
+  const [loadingPlanning, setLoadingPlanning] = useState(false);
+  const [plannerActionKey, setPlannerActionKey] = useState('');
 
   const [advisorForm, setAdvisorForm] = useState('');
   const [advisorDate, setAdvisorDate] = useState(today);
@@ -508,13 +942,8 @@ function HomePage() {
     setAppError('');
 
     try {
-      const [monthResponse, eventsResponse] = await Promise.all([
-        apiRequest(`/api/calendar/month?year=${year}&month=${month}`, { token }),
-        apiRequest(`/api/events?month=${requestedMonthKey}`, { token }),
-      ]);
-
+      const monthResponse = await apiRequest(`/api/calendar/month?year=${year}&month=${month}`, { token });
       setMonthData(monthResponse.data);
-      setMonthEvents(eventsResponse.data.events || []);
     } catch (error) {
       setAppError(error.message || 'Không tải được dữ liệu tháng.');
     } finally {
@@ -536,6 +965,20 @@ function HomePage() {
     }
   }, [selectedDate, token]);
 
+  const loadPlanningTimeline = useCallback(async () => {
+    setLoadingPlanning(true);
+    setPlanningTimelineError('');
+
+    try {
+      const response = await planningApi.listTimeline(token);
+      setPlanningTimeline(response.data || []);
+    } catch (error) {
+      setPlanningTimelineError(error.message || 'Không tải được planner timeline.');
+    } finally {
+      setLoadingPlanning(false);
+    }
+  }, [token]);
+
   useEffect(() => {
     loadHealthStatus();
   }, [loadHealthStatus]);
@@ -549,6 +992,10 @@ function HomePage() {
   }, [loadDayDetail, selectedDate]);
 
   useEffect(() => {
+    loadPlanningTimeline();
+  }, [loadPlanningTimeline]);
+
+  useEffect(() => {
     if (editingEventId) {
       return;
     }
@@ -556,6 +1003,22 @@ function HomePage() {
     setEventForm(createDefaultEventForm(selectedDate));
     setEventError('');
   }, [editingEventId, selectedDate]);
+
+  useEffect(() => {
+    setPlanningForm((current) => {
+      if (current.title || current.description || current.category) {
+        return current;
+      }
+
+      return createDefaultPlanningForm(selectedDate);
+    });
+  }, [selectedDate]);
+
+  useEffect(() => {
+    if (editingEventId) {
+      setPlannerMode('fixed');
+    }
+  }, [editingEventId]);
 
   useEffect(() => {
     setAdvisorDate(selectedDate);
@@ -639,6 +1102,15 @@ function HomePage() {
     }));
   }
 
+  function handlePlanningFormChange(event) {
+    const { name, type, value, checked } = event.target;
+
+    setPlanningForm((current) => ({
+      ...current,
+      [name]: type === 'checkbox' ? checked : value,
+    }));
+  }
+
   function handleToggleAllDay() {
     setEventForm((current) => {
       const nextIsAllDay = !current.is_all_day;
@@ -660,16 +1132,33 @@ function HomePage() {
     setEventError('');
   }
 
+  function resetPlanningForm() {
+    setPlanningForm(createDefaultPlanningForm(selectedDate));
+    setPlanningFormError('');
+  }
+
+  function handlePlannerModeChange(nextMode) {
+    setPlannerMode(nextMode);
+    setEventError('');
+    setPlanningFormError('');
+
+    if (nextMode !== 'fixed' && editingEventId) {
+      resetEventForm();
+    }
+  }
+
   function handleEditEvent(event) {
     setEditingEventId(event.id);
     setEventForm(mapEventToForm(event));
     setEventError('');
+    setPlannerMode('fixed');
   }
 
   async function refreshCurrentViews(targetDate = selectedDate, targetMonthKey = monthKey) {
     await Promise.all([
       loadDayDetail(targetDate),
       loadMonthData(targetMonthKey),
+      loadPlanningTimeline(),
     ]);
   }
 
@@ -726,6 +1215,84 @@ function HomePage() {
     }
   }
 
+  async function handlePlanningSubmit(event) {
+    event.preventDefault();
+    setSavingPlanning(true);
+    setPlanningFormError('');
+
+    try {
+      const payload = buildPlanningPayload(planningForm);
+      const createResponse = await planningApi.createItem(token, payload);
+      const createdItem = createResponse.data?.item;
+
+      if (createdItem?.id) {
+        await planningApi.suggestItem(token, createdItem.id);
+      }
+
+      await loadPlanningTimeline();
+      resetPlanningForm();
+    } catch (error) {
+      setPlanningFormError(error.message || 'Không tạo được việc cần planner.');
+    } finally {
+      setSavingPlanning(false);
+    }
+  }
+
+  async function handleSuggestPlanningItem(planningItemId) {
+    const nextActionKey = buildPlannerActionKey('suggest', planningItemId);
+    setPlannerActionKey(nextActionKey);
+    setPlanningTimelineError('');
+
+    try {
+      await planningApi.suggestItem(token, planningItemId);
+      await loadPlanningTimeline();
+    } catch (error) {
+      setPlanningTimelineError(error.message || 'Không tạo lại được gợi ý.');
+    } finally {
+      setPlannerActionKey('');
+    }
+  }
+
+  async function handleConfirmSuggestion(planningItemId, suggestion) {
+    const targetDate = suggestion.start_at.slice(0, 10);
+    const targetMonthKey = getMonthKey(targetDate);
+    const nextActionKey = buildPlannerActionKey('confirm', `${planningItemId}-${suggestion.rank}`);
+
+    setPlannerActionKey(nextActionKey);
+    setPlanningTimelineError('');
+
+    try {
+      await planningApi.confirmItem(token, planningItemId, {
+        start_at: suggestion.start_at,
+        end_at: suggestion.end_at,
+        is_all_day: suggestion.is_all_day,
+      });
+
+      setSelectedDate(targetDate);
+      setMonthKey(targetMonthKey);
+      await refreshCurrentViews(targetDate, targetMonthKey);
+    } catch (error) {
+      setPlanningTimelineError(error.message || 'Không chốt được gợi ý này.');
+    } finally {
+      setPlannerActionKey('');
+    }
+  }
+
+  async function handleDeletePlanningItem(planningItemId) {
+    const nextActionKey = buildPlannerActionKey('delete', planningItemId);
+    setPlannerActionKey(nextActionKey);
+    setPlanningTimelineError('');
+
+    try {
+      await planningApi.deleteItem(token, planningItemId);
+      await loadPlanningTimeline();
+    } catch (error) {
+      setPlanningTimelineError(error.message || 'Không xóa được việc này.');
+    } finally {
+      setPlannerActionKey('');
+    }
+  }
+
   async function handleAdvisorSubmit(event) {
     event.preventDefault();
     const message = advisorForm.trim();
@@ -749,14 +1316,10 @@ function HomePage() {
     ]);
 
     try {
-      const response = await apiRequest('/api/advisor/chat', {
-        method: 'POST',
-        token,
-        body: {
-          conversation_id: advisorConversationId,
-          message,
-          selected_date: requestDate,
-        },
+      const response = await advisorApi.chat(token, {
+        conversation_id: advisorConversationId,
+        message,
+        selected_date: requestDate,
       });
 
       setAdvisorConversationId(response.data.conversation_id);
@@ -788,6 +1351,7 @@ function HomePage() {
         <div className="session-actions">
           <span className="session-name">{user?.name}</span>
           <span className="calendar-api-url">{API_URL}</span>
+          <span className="calendar-api-url">{apiStatus}</span>
           <button className="secondary-button" type="button" onClick={handleJumpToday}>
             Hôm nay
           </button>
@@ -997,47 +1561,35 @@ function HomePage() {
           </div>
 
           <aside className="calendar-side-column">
-            <EventForm
-              form={eventForm}
+            <PlannerComposer
+              mode={plannerMode}
+              onModeChange={handlePlannerModeChange}
+              eventForm={eventForm}
               editingEventId={editingEventId}
               eventError={eventError}
               savingEvent={savingEvent}
-              onChange={handleEventFormChange}
+              onEventChange={handleEventFormChange}
               onToggleAllDay={handleToggleAllDay}
-              onSubmit={handleEventSubmit}
+              onEventSubmit={handleEventSubmit}
               onCancelEdit={resetEventForm}
+              planningForm={planningForm}
+              planningFormError={planningFormError}
+              savingPlanning={savingPlanning}
+              onPlanningChange={handlePlanningFormChange}
+              onPlanningSubmit={handlePlanningSubmit}
+              onPlanningReset={resetPlanningForm}
             />
 
-            <section className="calendar-side-card">
-              <div className="calendar-section-header">
-                <div>
-                  <p className="calendar-section-label">Agenda tháng</p>
-                  <h3>{getMonthHeading(monthKey)}</h3>
-                </div>
-                <span className="calendar-chip">{monthEvents.length} sự kiện</span>
-              </div>
-
-              {monthEvents.length > 0 ? (
-                <div className="calendar-month-event-list">
-                  {monthEvents.map((event) => (
-                    <button
-                      type="button"
-                      key={event.id}
-                      className={`calendar-month-event-item ${
-                        event.start_at?.startsWith(selectedDate) ? 'active' : ''
-                      }`}
-                      onClick={() => handleSelectDate(event.start_at.slice(0, 10))}
-                    >
-                      <strong>{event.title}</strong>
-                      <span>{formatTimeRange(event.start_at, event.end_at, event.is_all_day)}</span>
-                      <em>{formatShortDate(event.start_at.slice(0, 10))}</em>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="calendar-empty-state">Tháng này chưa có sự kiện nào.</div>
-              )}
-            </section>
+            <PlannerTimeline
+              timeline={planningTimeline}
+              loading={loadingPlanning}
+              timelineError={planningTimelineError}
+              plannerActionKey={plannerActionKey}
+              onOpenFixedEvent={handleSelectDate}
+              onSuggestItem={handleSuggestPlanningItem}
+              onConfirmSuggestion={handleConfirmSuggestion}
+              onDeleteItem={handleDeletePlanningItem}
+            />
 
             <AdvisorPanel
               advisorDate={advisorDate}

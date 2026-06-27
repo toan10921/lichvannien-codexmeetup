@@ -1,9 +1,11 @@
 const { pool } = require('../config/db');
 const AppError = require('../utils/AppError');
 const {
+  addDays,
   getCurrentYearMonth,
   getDateRangeBounds,
   getMonthDateTimeBounds,
+  getTodayDateString,
   isDateOnlyInput,
   normalizeDateTimeInput,
 } = require('../utils/dateTime');
@@ -206,6 +208,32 @@ async function createEvent(userId, payload) {
   return findEventById(userId, result.insertId);
 }
 
+async function listUpcomingEvents(userId, { fromDate = getTodayDateString(), limit = 20 } = {}) {
+  const start = `${fromDate} 00:00:00`;
+  const endExclusiveDate = addDays(fromDate, 180) || fromDate;
+  const endExclusive = `${endExclusiveDate} 00:00:00`;
+  const safeLimit = Number.isInteger(Number(limit))
+    ? Math.min(Math.max(Number(limit), 1), 100)
+    : 20;
+  const [rows] = await pool.execute(
+    `SELECT id, title, description,
+            DATE_FORMAT(start_at, '%Y-%m-%d %H:%i:%s') AS start_at,
+            DATE_FORMAT(end_at, '%Y-%m-%d %H:%i:%s') AS end_at,
+            is_all_day,
+            DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+            DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
+       FROM calendar_events
+      WHERE user_id = ?
+        AND COALESCE(end_at, start_at) >= ?
+        AND start_at < ?
+      ORDER BY start_at ASC, id ASC
+      LIMIT ${safeLimit}`,
+    [userId, start, endExclusive],
+  );
+
+  return rows.map(formatEvent);
+}
+
 async function updateEvent(userId, eventId, payload) {
   const existing = await findEventById(userId, eventId);
 
@@ -256,5 +284,6 @@ module.exports = {
   listEventsByDate,
   listEventsByMonth,
   listEventsInRange,
+  listUpcomingEvents,
   updateEvent,
 };

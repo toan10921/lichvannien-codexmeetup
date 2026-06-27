@@ -704,6 +704,15 @@ a:hover {
   color: #23422c;
 }
 
+.calendar-event-form select {
+  width: 100%;
+  border: 1px solid rgba(35, 66, 44, 0.12);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #f8fbf7;
+  color: #163020;
+}
+
 .calendar-event-form textarea,
 .calendar-advisor-form textarea {
   resize: vertical;
@@ -729,6 +738,40 @@ a:hover {
 .calendar-form-actions {
   display: flex;
   flex-wrap: wrap;
+  gap: 10px;
+}
+
+.planner-helper-text {
+  margin: 0;
+  color: #5d7363;
+  line-height: 1.5;
+}
+
+.planner-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.planner-mode-switch__item {
+  min-height: 44px;
+  border: 1px solid rgba(35, 66, 44, 0.12);
+  border-radius: 999px;
+  background: #f8fbf7;
+  color: #2f4f38;
+  font-weight: 800;
+}
+
+.planner-mode-switch__item.is-active {
+  border-color: rgba(48, 122, 67, 0.22);
+  background: #dff3da;
+  color: #1f5e31;
+}
+
+.planner-checkbox-group {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
 }
 
@@ -787,6 +830,137 @@ a:hover {
 .calendar-month-event-item em {
   color: #607767;
   font-style: normal;
+}
+
+.planner-timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.planner-timeline-item {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(35, 66, 44, 0.08);
+  background: #f8fbf7;
+}
+
+.planner-timeline-item--fixed {
+  background: linear-gradient(180deg, #f4fbf3 0%, #f9fcf8 100%);
+}
+
+.planner-timeline-item h4 {
+  margin: 0;
+  color: #173b45;
+}
+
+.planner-timeline-item p {
+  margin: 0;
+  color: #5e7464;
+  line-height: 1.55;
+}
+
+.planner-timeline-item__top,
+.planner-meta-row,
+.planner-card-actions,
+.planner-suggestion-item {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.planner-timeline-item__top {
+  align-items: center;
+}
+
+.planner-meta-row {
+  flex-wrap: wrap;
+  color: #345842;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.planner-card-actions {
+  flex-wrap: wrap;
+}
+
+.planner-pill,
+.planner-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.planner-pill--fixed {
+  background: #e2f4e5;
+  color: #2b7b41;
+}
+
+.planner-pill--flexible {
+  background: #e7f0ff;
+  color: #2a5aa5;
+}
+
+.planner-status {
+  background: #eef5ef;
+  color: #466950;
+}
+
+.planner-status--suggested {
+  background: #fff3d9;
+  color: #9a6b00;
+}
+
+.planner-status--draft {
+  background: #eef5ef;
+  color: #466950;
+}
+
+.planner-suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.planner-suggestion-item {
+  align-items: flex-start;
+  padding: 14px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid rgba(35, 66, 44, 0.08);
+}
+
+.planner-suggestion-item__content {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.planner-suggestion-item__content strong,
+.planner-suggestion-item__content span,
+.planner-suggestion-item__content em,
+.planner-suggestion-item__content p {
+  margin: 0;
+}
+
+.planner-suggestion-item__content span,
+.planner-suggestion-item__content em {
+  color: #52705b;
+  font-size: 0.92rem;
+  font-style: normal;
+}
+
+.planner-inline-empty {
+  padding: 14px 16px;
 }
 
 .calendar-advisor-answer {
@@ -1239,6 +1413,10 @@ a:hover {
     display: grid;
   }
 
+  .planner-mode-switch {
+    grid-template-columns: 1fr;
+  }
+
   .calendar-grid,
   .calendar-weekdays {
     gap: 6px;
@@ -1259,6 +1437,13 @@ a:hover {
 
   .calendar-event-item__actions {
     flex-direction: row;
+  }
+
+  .planner-suggestion-item,
+  .planner-timeline-item__top,
+  .planner-card-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .advisor-floating-button {

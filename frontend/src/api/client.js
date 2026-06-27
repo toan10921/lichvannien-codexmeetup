@@ -111,4 +111,43 @@ export const advisorApi = {
   },
 };
 
+export const planningApi = {
+  listTimeline(token) {
+    return apiRequest('/api/planning/timeline', {
+      method: 'GET',
+      token,
+    });
+  },
+
+  createItem(token, data) {
+    return apiRequest('/api/planning/items', {
+      method: 'POST',
+      token,
+      body: data,
+    });
+  },
+
+  suggestItem(token, planningItemId) {
+    return apiRequest(`/api/planning/items/${planningItemId}/suggestions`, {
+      method: 'POST',
+      token,
+    });
+  },
+
+  confirmItem(token, planningItemId, data) {
+    return apiRequest(`/api/planning/items/${planningItemId}/confirm`, {
+      method: 'POST',
+      token,
+      body: data,
+    });
+  },
+
+  deleteItem(token, planningItemId) {
+    return apiRequest(`/api/planning/items/${planningItemId}`, {
+      method: 'DELETE',
+      token,
+    });
+  },
+};
+
 export { API_URL };
